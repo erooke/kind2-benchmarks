@@ -1,0 +1,27 @@
+{
+  "pins": {
+    "kind2": {
+      "type": "GitRelease",
+      "repository": {
+        "type": "GitHub",
+        "owner": "kind2-mc",
+        "repo": "kind2"
+      },
+      "pre_releases": false,
+      "version_upper_bound": null,
+      "release_prefix": null,
+      "submodules": false,
+      "version": "v2.3.0",
+      "revision": "4888783264907805200a98ad4f38c08de996dbb9",
+      "url": "https://api.github.com/repos/kind2-mc/kind2/tarball/v2.3.0",
+      "hash": "076vqv76hmcmp5phpdmbzkcjb3n6aw94d23vgvinz9j945k7kkvm"
+    },
+    "nixpkgs": {
+      "type": "Channel",
+      "name": "nixpkgs-unstable",
+      "url": "https://releases.nixos.org/nixpkgs/nixpkgs-25.05pre788066.507b63021ada/nixexprs.tar.xz",
+      "hash": "1mx9ls3i1j4ydvi2pili1b68akr3i2zgdkddpsxnr2ql5l4ys9hl"
+    }
+  },
+  "version": 5
+}
