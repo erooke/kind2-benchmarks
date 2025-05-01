@@ -1,0 +1,212 @@
+include "common.lus"
+
+const N: Pos = 2; -- Number of participants
+type HostId = subtype { i : Nat | i < N };
+
+-- {{{ Message Types
+
+type MessageType = enum { Request, Response };
+
+type Message = struct {
+  msg_type: MessageType;
+  sender: HostId;
+  dest: HostId;
+};
+
+type MsgSet = struct {
+  requests: bool^N^N;
+  responses: bool^N^N;
+};
+
+const EmptySet: MsgSet = MsgSet {
+  responses =  false^N^N;
+  requests = false^N^N;
+};
+
+function MkResponse(src: HostId; dest: HostId) returns (msg: Message)
+let
+  msg = Message {
+      msg_type = Response;
+      sender = src;
+      dest = dest;
+  };
+tel
+
+function MkRequest(src: HostId; dest: HostId) returns (msg: Message)
+let
+  msg = Message {
+      msg_type = Request;
+      sender = src;
+      dest = dest;
+  };
+tel
+
+
+function None (arr: bool^N) returns (none: bool);
+var n : bool^N;
+let
+  n[i] = if i = 0 then not arr[i] else n[i-1] and not arr[i];
+  none = n[N-1];
+tel
+
+function All (arr: bool^N) returns (all: bool);
+var a : bool^N;
+let
+  a[i] = if i = 0 then arr[i] else a[i-1] and arr[i];
+  all = a[N-1];
+tel
+
+function EmptyMessageArray (arr: bool^N^N) returns (empty: bool);
+var a: bool^N;
+let
+  a[i] = None(arr[i]);
+  empty = All(a);
+tel
+
+function IsEmpty (msg_set: MsgSet) returns (empty: bool);
+let
+  empty =
+    EmptyMessageArray(msg_set.responses) and
+    EmptyMessageArray(msg_set.requests);
+tel
+
+
+function SetMsg(svm_in: bool^N^N; msg: Message) returns (svm_out: bool^N^N);
+let
+  svm_out[i][j] =
+    if i = msg.sender and j = msg.dest then
+      true
+    else
+      svm_in[i][j];
+tel
+
+function AddMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
+(* @contract
+  guarantee "Message is added"
+  MsgInSet(svm_out, msg);
+*)
+let
+  svm_out = MsgSet {
+    responses =
+      if msg.msg_type = Response
+        then SetMsg(svm_in.responses, msg)
+      else
+        svm_in.responses;
+
+    requests =
+      if msg.msg_type = Request
+        then SetMsg(svm_in.requests, msg)
+      else
+        svm_in.requests;
+  };
+tel
+
+function UnsetMsg(svm_in: bool^N^N; msg: Message) returns (svm_out: bool^N^N);
+(* @contract
+  guarantee "Message is removed"
+  not MsgInSet(svm_out, msg);
+*)
+let
+  svm_out[i][j] =
+    if i = msg.sender and j = msg.dest then
+      false
+    else
+      svm_in[i][j];
+tel
+
+function RemoveMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
+let
+  svm_out = MsgSet {
+    responses =
+      if msg.msg_type = Response
+        then UnsetMsg(svm_in.responses, msg)
+      else
+        svm_in.responses;
+
+    requests =
+      if msg.msg_type = Request
+        then UnsetMsg(svm_in.requests, msg)
+      else
+        svm_in.requests;
+  };
+tel
+
+function MsgInSet(svm: MsgSet; msg: Message) returns (contained: bool);
+let
+  contained =
+    if msg.msg_type = Request then
+      svm.requests[msg.sender][msg.dest]
+    else
+      svm.responses[msg.sender][msg.dest];
+tel
+-- }}}
+
+-- {{{ Network
+node Network(turn: HostId; send: Option<<Message>>) returns
+  (recv: Option<<Message>>; inFlight: MsgSet);
+(*@contract
+
+  assume "Sends come from turn"
+    send.some =>
+      send.value.sender = turn;
+
+  assume "No one sends to self"
+    send.some =>
+      send.value.dest <> send.value.sender;
+
+  guarantee "Recv goes to turn"
+  recv.some =>
+    recv.value.dest = turn;
+
+  guarantee "Recieved messages are in flight"
+    recv.some =>
+      (false -> MsgInSet(pre inFlight, recv.value));
+
+  guarantee "Recieved messages are not in flight"
+    recv.some =>
+      not MsgInSet(inFlight, recv.value);
+
+  guarantee "Sent messages are in flight"
+    send.some =>
+      MsgInSet(inFlight, send.value);
+
+  guarantee "Messages are not in flight unless sent"
+    forall (msg : Message)
+      (
+       (true -> not MsgInSet(pre inFlight, msg)) and
+       MsgInSet(inFlight, msg)
+      ) =>
+      (send.some and send.value = msg);
+
+  guarantee "Messages stay in flight until recieved"
+    forall (msg : Message)
+      (
+       (false -> MsgInSet(pre inFlight, msg)) and
+       not MsgInSet(inFlight, msg)
+      ) =>
+      (recv.some and recv.value = msg);
+
+*)
+var prevInFlight: MsgSet;
+let
+  prevInFlight = EmptySet -> pre inFlight;
+
+  recv = any {
+      m: Option<<Message>> |
+      m.some =>
+        ( MsgInSet(prevInFlight, m.value) and
+          m.value.dest = turn
+        )
+    };
+
+  inFlight =
+    if send.some and recv.some then
+      AddMsg(RemoveMsg(prevInFlight, recv.value), send.value)
+    else if send.some then
+      AddMsg(prevInFlight, send.value)
+    else if recv.some then
+      RemoveMsg(prevInFlight, recv.value)
+    else
+      prevInFlight;
+tel
+-- }}}
