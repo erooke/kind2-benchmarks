@@ -145,6 +145,10 @@ node Participant(id: HostId; nw_recv: Option<<Message>>)
   guarantee "Only send if we have the lock"
     nw_send.some
       => (id = 0 -> pre has_lock[id]);
+
+  guarantee "Do not send to self"
+    nw_send.some
+      => nw_send.value.dest <> id;
 *)
 var prev_has_lock: bool^N;
 var sending: bool;
@@ -172,7 +176,7 @@ let
       OptSome<<Message>>(
         Message {
           sender = id;
-          dest = any HostId;
+          dest = any { hid: HostId | hid <> id };
         }
       );
 tel
