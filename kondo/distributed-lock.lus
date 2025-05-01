@@ -57,6 +57,7 @@ let
 tel
 -- }}}
 
+-- {{{ Network
 node Network(turn: HostId; send: Option<<Message>>) returns
   (recv: Option<<Message>>; inFlight: MsgSet);
 (*@contract
@@ -114,7 +115,9 @@ let
     else
       prevInFlight;
 tel
+-- }}}
 
+-- {{{ Participant
 node Participant(id: HostId; nw_recv: Option<<Message>>)
   returns (nw_send: Option<<Message>>; has_lock: bool^N);
 (*@contract
@@ -173,7 +176,9 @@ let
         }
       );
 tel
+-- }}}
 
+-- {{{ System
 node System() returns (has_lock: bool^N; in_flight: MsgSet);
 (*@contract
   guarantee "Saftey"
@@ -196,5 +201,7 @@ let
   nw_recv, in_flight = Network(turn, nw_send);
   nw_send, has_lock = Participant(turn, nw_recv);
 tel
+
+-- }}}
 
 -- vim:foldmethod=marker:foldlevel=0
