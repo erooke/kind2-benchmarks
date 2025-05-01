@@ -6,12 +6,12 @@ type Option<<T>> = struct {
   value: T;
 };
 
-node OptNone<<T>>() returns (none: Option<<T>>);
+transparent node OptNone<<T>>() returns (none: Option<<T>>);
 let
   none = Option<<T>> { some = false; value = any T };
 tel
 
-function OptSome<<T>>(value: T) returns (some: Option<<T>>);
+transparent function OptSome<<T>>(value: T) returns (some: Option<<T>>);
 let
   some = Option<<T>> { some = true; value = value };
 tel
