@@ -1,0 +1,167 @@
+-- {{{ Boilerplate
+
+type Nat = subrange [0,*] of int;
+type Pos = subrange [1,*] of int;
+
+type Option<<T>> = struct {
+  some: bool;
+  value: T;
+};
+
+node OptNone<<T>>() returns (none: Option<<T>>);
+let
+  none = Option<<T>> { some = false; value = any T };
+tel
+
+function OptSome<<T>>(value: T) returns (some: Option<<T>>);
+let
+  some = Option<<T>> { some = true; value = value };
+tel
+
+node imported nondet() returns (r: bool);
+
+const N: Pos = 3; -- Number of participants
+
+type HostId = subtype { i : Nat | i < N };
+
+type Message = struct {
+  sender: HostId;
+  dest: HostId;
+};
+
+type MsgSet = bool^N^N;
+
+const EmptySet: MsgSet = false^N^N;
+
+function AddMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
+let
+  svm_out[i][j] =
+    if i = msg.sender and j = msg.dest then
+      true
+    else
+      svm_in[i][j];
+tel
+
+function RemoveMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
+let
+  svm_out[i][j] =
+    if i = msg.sender and j = msg.dest then
+      false
+    else
+      svm_in[i][j];
+tel
+
+function MsgInSet(svm: MsgSet; msg: Message) returns (contained: bool);
+let
+  contained = svm[msg.sender][msg.dest];
+tel
+-- }}}
+
+node Network(turn: HostId; send: Option<<Message>>) returns
+  (recv: Option<<Message>>; inFlight: MsgSet);
+var prevInFlight: MsgSet;
+let
+  prevInFlight = EmptySet -> pre inFlight;
+
+  recv = any {
+      m: Option<<Message>> |
+      m.some =>
+        ( MsgInSet(prevInFlight, m.value) and
+          m.value.dest = turn
+        )
+    };
+
+  inFlight =
+    if send.some and recv.some then
+      AddMsg(RemoveMsg(prevInFlight, recv.value), send.value)
+    else if send.some then
+      AddMsg(prevInFlight, send.value)
+    else if recv.some then
+      RemoveMsg(prevInFlight, recv.value)
+    else
+      prevInFlight;
+tel
+
+node Participant(id: HostId; nw_recv: Option<<Message>>)
+  returns (nw_send: Option<<Message>>; has_lock: bool^N);
+(*@contract
+  guarantee "Frame"
+    true ->
+      forall (i: HostId) i <> id
+        => has_lock[i] = pre has_lock[i];
+
+  guarantee "Correct Sender"
+    nw_send.some =>
+      nw_send.value.sender = id;
+
+  guarantee "Send or Recv, not both"
+    nw_send.some
+      => not nw_recv.some;
+
+  guarantee "Only gain lock due to recv"
+    (id <> 0 -> not pre has_lock[id]) and has_lock[id]
+      => nw_recv.some and nw_recv.value.dest = id;
+
+  guarantee "Only lose lock due to send"
+    (id = 0 -> pre has_lock[id]) and not has_lock[id]
+      => nw_send.some;
+
+  guarantee "Only send if we have the lock"
+    nw_send.some
+      => (id = 0 -> pre has_lock[id]);
+*)
+var prev_has_lock: bool^N;
+var sending: bool;
+var aquire: bool;
+let
+  prev_has_lock[i] = i = 0 -> pre has_lock[i];
+
+  sending = (not nw_recv.some) and prev_has_lock[id] and any bool;
+  aquire = nw_recv.some and nw_recv.value.dest = id;
+
+  has_lock[i] =
+    if id <> i then
+      prev_has_lock[i]
+    else if sending then
+      false
+    else if aquire then
+      true
+    else
+      prev_has_lock[i];
+
+  nw_send =
+    if not sending then
+      OptNone<<Message>>()
+    else
+      OptSome<<Message>>(
+        Message {
+          sender = id;
+          dest = any HostId;
+        }
+      );
+tel
+
+node System() returns (has_lock: bool^N; in_flight: MsgSet);
+(*@contract
+  guarantee "Saftey"
+  forall (idx, idy: HostId) has_lock[idx] and has_lock[idy] => idx = idy;
+
+  guarantee "has lock implies not in flight"
+  (exists (id: HostId) has_lock[id]) =>
+    not (exists (idx, idy: HostId) in_flight[idx][idy]);
+
+  guarantee "At most one in flight"
+  forall (m1, m2: Message)
+    (MsgInSet(in_flight, m1) and  MsgInSet(in_flight, m2)) =>
+      m1.sender = m2.sender and
+      m1.dest = m2.dest;
+*)
+var nw_send, nw_recv: Option<<Message>>;
+var turn: HostId;
+let
+  turn = any HostId;
+  nw_recv, in_flight = Network(turn, nw_send);
+  nw_send, has_lock = Participant(turn, nw_recv);
+tel
+
+-- vim:foldmethod=marker:foldlevel=0
