@@ -15,6 +15,10 @@ type MsgSet = bool^N^N;
 const EmptySet: MsgSet = false^N^N;
 
 function AddMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
+(* @contract
+  guarantee "Message is added"
+  MsgInSet(svm_out, msg);
+*)
 let
   svm_out[i][j] =
     if i = msg.sender and j = msg.dest then
@@ -24,6 +28,10 @@ let
 tel
 
 function RemoveMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
+(* @contract
+  guarantee "Message is removed"
+  not MsgInSet(svm_out, msg);
+*)
 let
   svm_out[i][j] =
     if i = msg.sender and j = msg.dest then
