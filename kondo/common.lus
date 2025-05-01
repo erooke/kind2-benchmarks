@@ -1,0 +1,17 @@
+type Nat = subrange [0,*] of int;
+type Pos = subrange [1,*] of int;
+
+type Option<<T>> = struct {
+  some: bool;
+  value: T;
+};
+
+node OptNone<<T>>() returns (none: Option<<T>>);
+let
+  none = Option<<T>> { some = false; value = any T };
+tel
+
+function OptSome<<T>>(value: T) returns (some: Option<<T>>);
+let
+  some = Option<<T>> { some = true; value = value };
+tel
