@@ -210,3 +210,90 @@ let
       prevInFlight;
 tel
 -- }}}
+
+
+-- {{{ Participant
+node Participant(id: HostId; nw_recv: Option<<Message>>)
+  returns (nw_send: Option<<Message>>; current_requests: Option<<HostId>>^N; valid_response: bool);
+(*@contract
+
+  assume "No requests from self"
+    nw_recv.some =>
+      nw_recv.value.sender <> nw_recv.value.dest;
+
+  guarantee "Do not send to self"
+    nw_send.some
+      => nw_send.value.dest <> nw_send.value.sender;
+
+  guarantee "Frame"
+    true ->
+      (forall (hid: HostId)
+        hid <> id =>
+          current_requests[hid] = pre current_requests[hid]
+      );
+
+  guarantee "Requests changing implies message processing"
+    true ->
+      (forall (hid: HostId)
+          (current_requests[hid] <> pre current_requests[hid]) =>
+          (nw_recv.some or nw_send.some)
+      );
+
+  guarantee "Correct Sender"
+    nw_send.some =>
+      nw_send.value.sender = id;
+
+  guarantee "Response implies request"
+    (nw_send.some and nw_send.value.msg_type = Response) =>
+    (nw_recv.some and nw_recv.value.msg_type = Request);
+
+*)
+var recieving, requesting, responding: bool;
+var requesting_from: HostId;
+var prev_current_requests: Option<<HostId>>^N;
+let
+
+  prev_current_requests[i] = OptNone<<HostId>>() -> pre current_requests[i];
+
+  requesting_from = any { hid: HostId | hid <> id };
+
+  recieving =
+    nw_recv.some and
+    nw_recv.value.dest = id;
+
+  valid_response =
+    recieving and
+    nw_recv.value.msg_type = Response and
+    prev_current_requests[id].some and
+    prev_current_requests[id].value = nw_recv.value.sender;
+
+  responding =
+    recieving and
+    nw_recv.value.msg_type = Request;
+
+  requesting =
+    not prev_current_requests[id].some and -- We should not be waiting on a request
+    not responding and                     -- We should not be responding to a request
+    any bool;                              -- We may choose to make a request
+
+  nw_send =
+    if responding then
+      OptSome<<Message>>(MkResponse(id, nw_recv.value.sender))
+    else if requesting then
+      OptSome<<Message>>(MkRequest(id, requesting_from))
+    else
+      OptNone<<Message>>();
+
+  current_requests[i] =
+    if i <> id then
+      prev_current_requests[i]
+    else if valid_response then
+      OptNone<<HostId>>()
+    else if requesting then
+      OptSome<<HostId>>(requesting_from)
+    else
+      prev_current_requests[i];
+
+
+tel
+-- }}}
