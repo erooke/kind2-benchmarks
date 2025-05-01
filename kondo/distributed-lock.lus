@@ -68,6 +68,10 @@ node Network(turn: HostId; send: Option<<Message>>) returns
   assume "No one sends to self"
   send.some => send.value.dest <> send.value.sender;
 
+  guarantee "Recv goes to turn"
+  recv.some =>
+    recv.value.dest = turn;
+
   guarantee "Recieved messages are in flight"
   recv.some => (false -> MsgInSet(pre inFlight, recv.value));
 
