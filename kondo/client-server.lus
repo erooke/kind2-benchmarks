@@ -297,3 +297,32 @@ let
 
 tel
 -- }}}
+
+-- {{{ System
+node System()
+returns (
+  in_flight: MsgSet;
+  current_requests: Option<<HostId>>^N;
+  nw_send: Option<<Message>>;
+  nw_recv: Option<<Message>>
+);
+(*@contract
+  guarantee "Saftey"
+    forall (m: Message)
+      MsgInSet(in_flight, m) and m.msg_type = Response =>
+        current_requests[m.dest].some and
+        current_requests[m.dest].value = m.sender;
+
+  guarantee "No one sends to self"
+    nw_send.some => nw_send.value.sender <> nw_send.value.dest;
+*)
+var turn: HostId;
+var valid_response: bool;
+let
+  turn = any HostId;
+  nw_recv, in_flight = Network(turn, nw_send);
+  nw_send, current_requests, valid_response = Participant(turn, nw_recv);
+tel
+-- }}}
+
+-- vim:foldmethod=marker:foldlevel=0
