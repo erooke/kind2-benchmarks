@@ -187,7 +187,15 @@ tel
 -- }}}
 
 -- {{{ System
-node System() returns (has_lock: bool^N; in_flight: MsgSet);
+node System()
+returns (
+  has_lock: bool^N;
+  in_flight:
+  MsgSet;
+  turn: HostId;
+  nw_recv: Option<<Message>>;
+  nw_send: Option<<Message>>
+);
 (*@contract
   guarantee "Saftey"
   forall (idx, idy: HostId) has_lock[idx] and has_lock[idy] => idx = idy;
@@ -201,9 +209,15 @@ node System() returns (has_lock: bool^N; in_flight: MsgSet);
     (MsgInSet(in_flight, m1) and  MsgInSet(in_flight, m2)) =>
       m1.sender = m2.sender and
       m1.dest = m2.dest;
+
+  guarantee "Messages sent by turn"
+  nw_send.some
+    => (nw_send.value.sender = turn);
+
+  guarantee "Messages recieved by turn"
+  nw_recv.some
+    => (nw_recv.value.dest = turn);
 *)
-var nw_send, nw_recv: Option<<Message>>;
-var turn: HostId;
 let
   turn = any HostId;
   nw_recv, in_flight = Network(turn, nw_send);
