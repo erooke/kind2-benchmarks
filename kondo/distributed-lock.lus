@@ -20,7 +20,7 @@ tel
 
 node imported nondet() returns (r: bool);
 
-const N: Pos = 3; -- Number of participants
+const N: Pos; -- Number of participants
 
 type HostId = subtype { i : Nat | i < N };
 
@@ -59,6 +59,39 @@ tel
 
 node Network(turn: HostId; send: Option<<Message>>) returns
   (recv: Option<<Message>>; inFlight: MsgSet);
+(*@contract
+
+  assume "Sends come from turn"
+  send.some => send.value.sender = turn;
+
+  assume "No one sends to self"
+  send.some => send.value.dest <> send.value.sender;
+
+  guarantee "Recieved messages are in flight"
+  recv.some => (false -> MsgInSet(pre inFlight, recv.value));
+
+  guarantee "Recieved messages are not in flight"
+  recv.some => not MsgInSet(inFlight, recv.value);
+
+  guarantee "Sent messages are in flight"
+  send.some => MsgInSet(inFlight, send.value);
+
+  guarantee "Messages are not in flight unless sent"
+  forall (msg : Message)
+    (
+     (true -> not MsgInSet(pre inFlight, msg)) and
+     MsgInSet(inFlight, msg)
+    ) =>
+    (send.some and send.value = msg);
+
+  guarantee "Messages stay in flight until recieved"
+  forall (msg : Message)
+    (
+     (false -> MsgInSet(pre inFlight, msg)) and
+     not MsgInSet(inFlight, msg)
+    ) =>
+    (recv.some and recv.value = msg);
+*)
 var prevInFlight: MsgSet;
 let
   prevInFlight = EmptySet -> pre inFlight;
