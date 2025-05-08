@@ -1,0 +1,252 @@
+include "common.lus"
+
+const N: Pos = 3; -- Number of participants
+type HostId = subtype { i : Nat | i < N };
+
+-- TODO how to generalize this?
+const host_id : int^N = [2, 0, 1];
+
+-- {{{ Message Types
+
+type Message = struct {
+  payload: HostId;
+  dest: HostId;
+};
+
+type MsgSet = bool^N^N;
+
+const EmptySet: MsgSet = false^N^N;
+
+function AddMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
+(* @contract
+  guarantee "Message is added"
+  MsgInSet(svm_out, msg);
+*)
+let
+  svm_out[i][j] =
+    if i = msg.payload and j = msg.dest then
+      true
+    else
+      svm_in[i][j];
+tel
+
+function RemoveMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
+(* @contract
+  guarantee "Message is removed"
+  not MsgInSet(svm_out, msg);
+*)
+let
+  svm_out[i][j] =
+    if i = msg.payload and j = msg.dest then
+      false
+    else
+      svm_in[i][j];
+tel
+
+function MsgInSet(svm: MsgSet; msg: Message) returns (contained: bool);
+let
+  contained = svm[msg.payload][msg.dest];
+tel
+-- }}}
+
+-- {{{ Network
+node Network(turn: HostId; send: Option<<Message>>) returns
+  (recv: Option<<Message>>; seen_messages: MsgSet);
+(*@contract
+
+  guarantee "Recv goes to turn"
+  recv.some =>
+    recv.value.dest = turn;
+
+  guarantee "Recieved messages were sent"
+  recv.some
+    => MsgInSet(seen_messages, recv.value);
+
+*)
+var prev_seen_messages: MsgSet;
+let
+  prev_seen_messages = EmptySet -> pre seen_messages;
+
+  recv = any {
+      m: Option<<Message>> |
+      m.some =>
+        ( MsgInSet(prev_seen_messages, m.value) and
+          m.value.dest = turn
+        )
+    };
+
+  seen_messages =
+    if send.some then
+      AddMsg(prev_seen_messages, send.value)
+    else
+      prev_seen_messages;
+tel
+-- }}}
+
+-- {{{ Participant
+node Participant(id: HostId; nw_recv: Option<<Message>>)
+  returns (nw_send: Option<<Message>>; is_leader: bool^N; max_heard: int^N);
+(*@contract
+  guarantee "Frame"
+    forall (i: HostId) i <> id
+      => is_leader[i] = ( false -> pre is_leader[i] );
+
+  guarantee "Only send if higher than ID"
+    nw_send.some =>
+      nw_send.value.payload >= host_id[id];
+
+  guarantee "Do not send to self"
+    nw_send.some
+      => nw_send.value.dest <> id;
+
+  guarantee "Not my id implies recv"
+    nw_send.some and
+    nw_send.value.payload <> host_id[id]
+      => nw_recv.some and nw_recv.value.payload = nw_send.value.payload;
+
+  guarantee "Max heard is monotonic"
+    forall (i: HostId)
+      max_heard[i] >= (-1 -> pre max_heard[i]);
+
+  guarantee "Max heard is bounded"
+    forall (i: HostId)
+      (max_heard[i] >= -1) and
+      (max_heard[i] < N) ;
+*)
+var sending,
+    declaring,
+    forwarding : bool;
+
+var neighbor: HostId;
+
+var prev_max_heard: int^N;
+let
+  prev_max_heard[i] = -1 -> pre max_heard[i];
+
+  -- Our neighbor in the ring
+  neighbor = if id + 1 = N then 0 else id + 1;
+
+  -- Track the highest ID we have heard so far
+  max_heard[i] =
+    if i = id and nw_recv.some and nw_recv.value.payload > prev_max_heard[i] then
+      nw_recv.value.payload
+    else
+      prev_max_heard[i];
+
+  -- We declare ourselves leader if we recieve a message with our own id as the payload
+  declaring =
+      nw_recv.some and
+      nw_recv.value.payload = host_id[id];
+
+  -- We forward any message with an id smaller than us
+  forwarding =
+    nw_recv.some and (nw_recv.value.payload > host_id[id]);
+
+  -- We send a message if we are forwarding or if we feel like it
+  sending = forwarding or any bool;
+
+  is_leader[i] = false ->
+    pre is_leader[i] or
+    ( i = id and declaring)
+    ;
+
+  nw_send =
+    if forwarding then
+      OptSome<<Message>>(
+        Message {
+          payload = nw_recv.value.payload;
+          dest = neighbor;
+        }
+      )
+    else if sending then
+      OptSome<<Message>>(
+        Message {
+          payload = host_id[id];
+          dest = neighbor;
+        }
+      )
+    else
+      OptNone<<Message>>()
+    ;
+tel
+-- }}}
+
+function between(small, mid, large: HostId) returns (res : bool);
+let
+  res =
+    if small < large
+    then (small < mid) and (mid < large)
+    else (mid < large) or (small < mid) ;
+tel
+
+-- {{{ System
+node System()
+returns (
+  is_leader: bool^N;
+  turn: HostId;
+  seen_messages: MsgSet;
+  nw_recv: Option<<Message>>;
+  nw_send: Option<<Message>>;
+  max_heard: int^N
+);
+(*@contract
+
+  guarantee "Saftey"
+    forall (idx, idy: HostId)
+      is_leader[idx] and is_leader[idy] => idx = idy;
+
+  guarantee "Payload is at least turn"
+    nw_send.some
+      => (nw_send.value.payload >= host_id[turn]);
+
+  guarantee "Messages recieved by turn"
+    nw_recv.some
+      => (nw_recv.value.dest = turn);
+
+  guarantee "Not my id implies recv"
+    nw_send.some and
+    nw_send.value.payload <> host_id[turn]
+      => MsgInSet(
+        seen_messages,
+        Message {
+          payload = nw_send.value.payload;
+          dest = turn;
+        }
+      );
+
+  guarantee "Chord dominates"
+    forall (src, mid, dest: HostId)
+      (
+        (
+          between(src, mid, dest) and
+          max_heard[dest] = host_id[src]
+        )
+        => ( host_id[mid] < host_id[src] )
+      );
+
+  guarantee "Chord dominates messages"
+    forall (src, mid, dest: HostId)
+      (
+        (
+          between(src, mid, dest) and
+          max_heard[dest] = host_id[src]
+        )
+        => MsgInSet(
+            seen_messages,
+            Message {
+              payload = host_id[src];
+              dest = mid;
+            }
+           )
+       );
+
+*)
+let
+  turn = any HostId;
+  nw_recv, seen_messages = Network(turn, nw_send);
+  nw_send, is_leader, max_heard = Participant(turn, nw_recv);
+tel
+
+-- }}}
+
+-- vim:foldmethod=marker:foldlevel=0
