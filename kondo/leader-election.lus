@@ -1,0 +1,156 @@
+
+
+type Nat = subrange [0,*] of int;
+type Pos = subrange [1,*] of int;
+
+type Option<<T>> = struct {
+  some: bool;
+  value: T;
+};
+
+node OptNone<<T>>() returns (none: Option<<T>>);
+let
+  none = Option<<T>> { some = false; value = any T };
+tel
+
+function OptSome<<T>>(value: T) returns (some: Option<<T>>);
+let
+  some = Option<<T>> { some = true; value = value };
+tel
+
+const N: Pos = 4;
+
+type Index = subtype { i: Nat | i < N };
+
+ -- For simplicity, we assume ids are between 0 and N-1
+type Id = subtype { i: Nat | i < N };
+
+param Ids: Id^N;
+
+type Message = struct {
+  dst: Id;
+  max_heard_id : Id;
+};
+
+type MsgSet = bool^N^N;
+
+const EmptySet: MsgSet = false^N^N;
+
+function AddMsgToSet(m: Message; s_in: MsgSet) returns (s_out: MsgSet);
+let
+   s_out[i][j] = if i=m.dst and j=m.max_heard_id then true else s_in[i][j];
+tel
+
+function IsMsgInSet(m: Message; s_in: MsgSet) returns (r: bool);
+let
+  r = s_in[m.dst][m.max_heard_id];
+tel
+
+node Network(send: Option<<Message>>) returns (
+  recv: Option<<Message>>; sentMsgs : MsgSet);
+var prevSentMsgs: MsgSet;
+let
+  prevSentMsgs = EmptySet -> pre sentMsgs;
+  frame (sentMsgs)
+    sentMsgs = EmptySet;
+  let
+    if send.some then
+      sentMsgs = AddMsgToSet(send.value, prevSentMsgs);
+    fi
+  tel
+  recv = any { m: Option<<Message>> | m.some => IsMsgInSet(m.value, prevSentMsgs) };
+tel
+
+function NextProcess(idx: Index) returns (next: Index);
+let
+  next = if idx = N-1 then 0 else idx + 1;
+tel
+
+transparent function PrevProcess(idx: Index) returns (next: Index);
+let
+  next = if idx = 0 then N-1 else idx - 1;
+tel
+
+function Max(a: int; b: int) returns (c: int);
+let
+  c = if a > b then a else b;
+tel
+
+function IsLeader(max_heard_ids: int^N; idx: Index) returns (r: bool);
+let
+  r = max_heard_ids[idx] = Ids[idx];
+tel
+
+function Between(src: Nat; dst: Nat; mid: Nat) returns (r: bool);
+let
+  r =
+    if src < dst then
+      src < mid and mid < dst
+    else
+      mid > src or mid < dst;
+tel
+
+function MakeMsg(dst: Id; max_heard_id: int) returns (msg: Message);
+let
+  msg = Message { dst = dst; max_heard_id = max_heard_id };
+tel
+
+node Process (id: Id; nw_recv: Option<<Message>>)
+  returns (nw_send: Option<<Message>>; max_heard_ids : int^N)
+var max_heard_id : int;
+    msg : Message;
+let
+  if (nw_recv.some and nw_recv.value.dst = id) then
+    max_heard_id = Max(
+      -1 -> pre max_heard_ids[id],
+      nw_recv.value.max_heard_id
+    );
+  else
+    max_heard_id = -1 -> pre max_heard_ids[id];
+  fi
+
+  max_heard_ids[i] = -1 ->
+    if i=id then max_heard_id else pre max_heard_ids[i];
+
+  msg = MakeMsg(NextProcess(id), Max (Ids[id], max_heard_id));
+  nw_send = OptNone<<Message>>() -> OptSome<<Message>>(msg);
+tel
+
+node LeaderElection(src: Index) returns (max_heard_ids: int^N);
+(*@contract
+  assume "Ids are unique"
+    forall (i: Index; j:Index) Ids[i]=Ids[j] => i=j;
+
+  guarantee "There is at most only one leader"
+    (forall (i: Index; j:Index) 
+      IsLeader(max_heard_ids, i) and IsLeader(max_heard_ids, j) => i=j);
+*)
+var network_send, network_recv: Option<<Message>>;
+var sentMsgs: MsgSet; -- probe
+let
+  network_send, max_heard_ids = Process(src, network_recv);
+
+  network_recv, sentMsgs = Network(network_send);
+
+  check "Lemma1"
+    (forall (start: Index; end: Index; mid: Index)
+      (Between(start, end, mid) and
+       max_heard_ids[end] = Ids[start])
+     => Ids[mid] < Ids[start]);
+
+  check "max_heard_ids upper bound" forall (i:Index) max_heard_ids[i]<N;
+  
+  check "Lemma2"
+    forall (msg: Message) IsMsgInSet(msg, sentMsgs) =>
+      msg.max_heard_id >= Ids[PrevProcess(msg.dst)];
+
+  check "Lemma3"
+    forall (i : Index) max_heard_ids[i]>=0 =>
+      (exists (msg: Message) IsMsgInSet(msg, sentMsgs) and
+        msg.dst=i and msg.max_heard_id=max_heard_ids[i]);
+
+  check "Lemma4"
+    (forall (msg1:Message) (IsMsgInSet(msg1, sentMsgs) and msg1.max_heard_id>Ids[PrevProcess(msg1.dst)])
+    =>
+    (exists (msg2:Message) IsMsgInSet(msg2, sentMsgs) and msg2.dst=PrevProcess(msg1.dst) and msg2.max_heard_id=msg1.max_heard_id));
+tel
