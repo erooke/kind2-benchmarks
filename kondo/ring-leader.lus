@@ -175,6 +175,8 @@ let
 tel
 -- }}}
 
+-- {{{ System
+
 function between(small, mid, large: HostId) returns (res : bool);
 let
   res =
@@ -183,7 +185,6 @@ let
     else (mid < large) or (small < mid) ;
 tel
 
--- {{{ System
 node System()
 returns (
   is_leader: bool^N;
