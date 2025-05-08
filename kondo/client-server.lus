@@ -231,9 +231,12 @@ node Participant(id: HostId; nw_recv: Option<<Message>>)
     ;
 
   guarantee "Response implies request"
-    (nw_send.some and nw_send.value.msg_type = Response) =>
-    (nw_recv.some and nw_recv.value.msg_type = Request);
+    (nw_send.some and nw_send.value.msg_type = Response)
+      => (nw_recv.some and nw_recv.value.msg_type = Request);
 
+  guarantee "Never request self"
+    nw_send.some and nw_send.value.msg_type = Request
+      => nw_send.value.dest <> id;
 *)
 var recieving, requesting, responding: bool;
 var requesting_from: HostId;
@@ -300,7 +303,8 @@ returns (
           msg_type = Request;
           sender = nw_recv.value.dest;
           dest = nw_recv.value.sender;
-        });
+        })
+    ;
 *)
 var turn: HostId;
 var valid_response: bool;
@@ -309,9 +313,37 @@ let
   nw_recv, seen_messages = Network(turn, nw_send);
   nw_send, current_requests, valid_response = Participant(turn, nw_recv);
 
-  check "Seen Messages behave correctly"
+  check "Received messages are seen"
     nw_recv.some
       => MsgInSet(seen_messages, nw_recv.value);
+
+  check "Sent messages are seen"
+    nw_send.some
+      => MsgInSet(seen_messages, nw_send.value);
+
+  check "Received respects turn"
+    nw_recv.some => nw_recv.value.dest = turn;
+
+  check "Sent respects turn"
+    nw_send.some => nw_send.value.sender = turn;
+
+  check "Never send request from self"
+    nw_send.some and nw_send.value.msg_type = Request
+      => nw_send.value.dest <> nw_send.value.sender;
+
+  check "Never recv request from self"
+    nw_recv.some and nw_recv.value.msg_type = Request
+      => nw_recv.value.dest <> nw_recv.value.sender;
+
+  check "Response iff request"
+    (nw_send.some and nw_send.value.msg_type = Response)
+      = (nw_recv.some and
+         nw_recv.value
+          = Message {
+            msg_type = Request;
+            dest = turn;
+            sender = nw_send.value.dest;
+          });
 
 tel
 -- }}}
