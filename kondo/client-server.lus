@@ -154,6 +154,16 @@ node Network(turn: HostId; send: Option<<Message>>) returns
   recv.some
     => MsgInSet(seen_messages, recv.value);
 
+  guarantee "Sent messages are monotonic"
+  true ->
+    forall (msg: Message)
+      MsgInSet(pre seen_messages, msg) => MsgInSet(seen_messages, msg);
+
+  guarantee "Messages are only seen if they are sent"
+  true ->
+    forall (msg: Message)
+      not MsgInSet(pre seen_messages, msg) and MsgInSet(seen_messages, msg)
+        => send.some and send.value = msg;
 *)
 var prev_seen_messages: MsgSet;
 let
