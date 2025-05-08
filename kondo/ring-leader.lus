@@ -3,8 +3,7 @@ include "common.lus"
 const N: Pos = 3; -- Number of participants
 type HostId = subtype { i : Nat | i < N };
 
--- TODO how to generalize this?
-const host_id : int^N = [2, 0, 1];
+param host_id : HostId^N;
 
 -- {{{ Message Types
 
@@ -53,6 +52,11 @@ tel
 node Network(turn: HostId; send: Option<<Message>>) returns
   (recv: Option<<Message>>; seen_messages: MsgSet);
 (*@contract
+
+  assume "Ids are unique"
+    (forall (i, j: HostId)
+      host_id[i] = host_id[j]
+        => i = j);
 
   guarantee "Recv goes to turn"
   recv.some =>
