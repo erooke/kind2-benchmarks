@@ -190,31 +190,42 @@ node Participant(id: HostId; nw_recv: Option<<Message>>)
   returns (nw_send: Option<<Message>>; current_requests: Option<<HostId>>^N; valid_response: bool);
 (*@contract
 
-  assume "No requests from self"
-    nw_recv.some =>
-      nw_recv.value.sender <> nw_recv.value.dest;
-
-  guarantee "Do not send to self"
-    nw_send.some
-      => nw_send.value.dest <> nw_send.value.sender;
+  guarantee "Correct Sender"
+    nw_send.some =>
+      nw_send.value.sender = id;
 
   guarantee "Frame"
     true ->
       (forall (hid: HostId)
         hid <> id =>
-          current_requests[hid] = pre current_requests[hid]
+          current_requests[hid] = (pre current_requests)[hid]
       );
 
-  guarantee "Requests changing implies message processing"
-    true ->
-      (forall (hid: HostId)
-          (current_requests[hid] <> pre current_requests[hid]) =>
-          (nw_recv.some or nw_send.some)
-      );
+  guarantee "Lemma 1"
+    forall (hid: HostId)
+      (false -> not (pre current_requests)[hid].some) and
+      current_requests[hid].some
+        => nw_send.some and
+           nw_send.value
+            = Message {
+               msg_type = Request;
+               sender = hid;
+               dest = current_requests[hid].value;
+              }
+    ;
 
-  guarantee "Correct Sender"
-    nw_send.some =>
-      nw_send.value.sender = id;
+  guarantee "Lemma 2"
+    forall (hid: HostId)
+      (false -> (pre current_requests)[hid].some) and
+      (not current_requests[hid].some)
+        => nw_recv.some and
+           nw_recv.value
+            = Message {
+               msg_type = Response;
+               sender = (pre current_requests)[hid].value;
+               dest = hid;
+              }
+    ;
 
   guarantee "Response implies request"
     (nw_send.some and nw_send.value.msg_type = Response) =>
