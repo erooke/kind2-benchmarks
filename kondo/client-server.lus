@@ -145,6 +145,7 @@ tel
 node Network(turn: HostId; send: Option<<Message>>) returns
   (recv: Option<<Message>>; seen_messages: MsgSet);
 (*@contract
+  var prev_seen_messages : MsgSet = EmptySet -> pre seen_messages;
 
   guarantee "Recv goes to turn"
   recv.some =>
@@ -155,15 +156,17 @@ node Network(turn: HostId; send: Option<<Message>>) returns
     => MsgInSet(seen_messages, recv.value);
 
   guarantee "Sent messages are monotonic"
-  true ->
     forall (msg: Message)
-      MsgInSet(pre seen_messages, msg) => MsgInSet(seen_messages, msg);
+      MsgInSet(prev_seen_messages, msg) => MsgInSet(seen_messages, msg);
 
-  guarantee "Messages are only seen if they are sent"
-  true ->
+  guarantee "New seen message implies send"
     forall (msg: Message)
-      not MsgInSet(pre seen_messages, msg) and MsgInSet(seen_messages, msg)
+      not MsgInSet(prev_seen_messages, msg) and MsgInSet(seen_messages, msg)
         => send.some and send.value = msg;
+
+  guarantee "Send implies seen message"
+    send.some
+        => MsgInSet(seen_messages, send.value);
 *)
 var prev_seen_messages: MsgSet;
 let
