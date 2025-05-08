@@ -143,74 +143,37 @@ tel
 
 -- {{{ Network
 node Network(turn: HostId; send: Option<<Message>>) returns
-  (recv: Option<<Message>>; inFlight: MsgSet);
+  (recv: Option<<Message>>; seen_messages: MsgSet);
 (*@contract
-
-  assume "Sends come from turn"
-    send.some =>
-      send.value.sender = turn;
-
-  assume "No one sends to self"
-    send.some =>
-      send.value.dest <> send.value.sender;
 
   guarantee "Recv goes to turn"
   recv.some =>
     recv.value.dest = turn;
 
-  guarantee "Recieved messages are in flight"
-    recv.some =>
-      (false -> MsgInSet(pre inFlight, recv.value));
-
-  guarantee "Recieved messages are not in flight"
-    recv.some =>
-      not MsgInSet(inFlight, recv.value);
-
-  guarantee "Sent messages are in flight"
-    send.some =>
-      MsgInSet(inFlight, send.value);
-
-  guarantee "Messages are not in flight unless sent"
-    forall (msg : Message)
-      (
-       (true -> not MsgInSet(pre inFlight, msg)) and
-       MsgInSet(inFlight, msg)
-      ) =>
-      (send.some and send.value = msg);
-
-  guarantee "Messages stay in flight until recieved"
-    forall (msg : Message)
-      (
-       (false -> MsgInSet(pre inFlight, msg)) and
-       not MsgInSet(inFlight, msg)
-      ) =>
-      (recv.some and recv.value = msg);
+  guarantee "Recieved messages were sent"
+  recv.some
+    => MsgInSet(seen_messages, recv.value);
 
 *)
-var prevInFlight: MsgSet;
+var prev_seen_messages: MsgSet;
 let
-  prevInFlight = EmptySet -> pre inFlight;
+  prev_seen_messages = EmptySet -> pre seen_messages;
 
   recv = any {
       m: Option<<Message>> |
       m.some =>
-        ( MsgInSet(prevInFlight, m.value) and
+        ( MsgInSet(prev_seen_messages, m.value) and
           m.value.dest = turn
         )
     };
 
-  inFlight =
-    if send.some and recv.some then
-      AddMsg(RemoveMsg(prevInFlight, recv.value), send.value)
-    else if send.some then
-      AddMsg(prevInFlight, send.value)
-    else if recv.some then
-      RemoveMsg(prevInFlight, recv.value)
+  seen_messages =
+    if send.some then
+      AddMsg(prev_seen_messages, send.value)
     else
-      prevInFlight;
+      prev_seen_messages;
 tel
 -- }}}
-
 
 -- {{{ Participant
 node Participant(id: HostId; nw_recv: Option<<Message>>)
