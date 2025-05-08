@@ -1,22 +1,4 @@
-
-
-type Nat = subrange [0,*] of int;
-type Pos = subrange [1,*] of int;
-
-type Option<<T>> = struct {
-  some: bool;
-  value: T;
-};
-
-node OptNone<<T>>() returns (none: Option<<T>>);
-let
-  none = Option<<T>> { some = false; value = any T };
-tel
-
-function OptSome<<T>>(value: T) returns (some: Option<<T>>);
-let
-  some = Option<<T>> { some = true; value = value };
-tel
+include "common.lus"
 
 const N: Pos = 4;
 
@@ -26,6 +8,8 @@ type Index = subtype { i: Nat | i < N };
 type Id = subtype { i: Nat | i < N };
 
 param Ids: Id^N;
+
+-- {{{ Message Types
 
 type Message = struct {
   dst: Id;
@@ -45,6 +29,15 @@ function IsMsgInSet(m: Message; s_in: MsgSet) returns (r: bool);
 let
   r = s_in[m.dst][m.max_heard_id];
 tel
+
+function MakeMsg(dst: Id; max_heard_id: int) returns (msg: Message);
+let
+  msg = Message { dst = dst; max_heard_id = max_heard_id };
+tel
+
+--- }}}
+
+-- {{{ Network
 
 node Network(send: Option<<Message>>) returns (
   recv: Option<<Message>>; sentMsgs : MsgSet);
@@ -71,28 +64,13 @@ let
   next = if idx = 0 then N-1 else idx - 1;
 tel
 
+--- }}}
+
+-- {{{ Process
+
 function Max(a: int; b: int) returns (c: int);
 let
   c = if a > b then a else b;
-tel
-
-function IsLeader(max_heard_ids: int^N; idx: Index) returns (r: bool);
-let
-  r = max_heard_ids[idx] = Ids[idx];
-tel
-
-function Between(src: Nat; dst: Nat; mid: Nat) returns (r: bool);
-let
-  r =
-    if src < dst then
-      src < mid and mid < dst
-    else
-      mid > src or mid < dst;
-tel
-
-function MakeMsg(dst: Id; max_heard_id: int) returns (msg: Message);
-let
-  msg = Message { dst = dst; max_heard_id = max_heard_id };
 tel
 
 node Process (id: Id; nw_recv: Option<<Message>>)
@@ -114,6 +92,22 @@ let
 
   msg = MakeMsg(NextProcess(id), Max (Ids[id], max_heard_id));
   nw_send = OptNone<<Message>>() -> OptSome<<Message>>(msg);
+tel
+-- }}}
+
+-- {{{ System
+function IsLeader(max_heard_ids: int^N; idx: Index) returns (r: bool);
+let
+  r = max_heard_ids[idx] = Ids[idx];
+tel
+
+function Between(src: Nat; dst: Nat; mid: Nat) returns (r: bool);
+let
+  r =
+    if src < dst then
+      src < mid and mid < dst
+    else
+      mid > src or mid < dst;
 tel
 
 node LeaderElection(src: Index) returns (max_heard_ids: int^N);
@@ -139,7 +133,7 @@ let
      => Ids[mid] < Ids[start]);
 
   check "max_heard_ids upper bound" forall (i:Index) max_heard_ids[i]<N;
-  
+
   check "Lemma2"
     forall (msg: Message) IsMsgInSet(msg, sentMsgs) =>
       msg.max_heard_id >= Ids[PrevProcess(msg.dst)];
@@ -154,3 +148,7 @@ let
     =>
     (exists (msg2:Message) IsMsgInSet(msg2, sentMsgs) and msg2.dst=PrevProcess(msg1.dst) and msg2.max_heard_id=msg1.max_heard_id));
 tel
+
+--- }}}
+
+-- vim:foldmethod=marker:foldlevel=0
