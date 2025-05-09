@@ -68,3 +68,27 @@ On each time step nodes do the following:
 3. If they are waiting on a response and have received it they mark themselves
    as no longer waiting
 4. Otherwise they may send a request to a random node
+
+## Leader Election
+
+This models a ring of nodes which is attempting to elect a leader. Each node
+may only send messages to its neighbor. Each node has a unique, ordered, id.
+The protocol is a distributed maxima finding algorithm. The safety property
+which is guaranteed is:
+
+> At any point in time there is at most one leader
+
+### Network Semantics
+
+The network here only guarantees that a message which is received by a node
+was, at some point, sent by a node. There is no guarantee that a message is
+delivered nor how many times.
+
+### Nodes
+
+Nodes here keep track of the largest id they have heard. On each time step
+nodes do the following:
+
+1. If they receive a message they update the record of the largest id they have
+   heard
+2. They send a message to their neighbor of the largest id they have heard
