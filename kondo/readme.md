@@ -45,3 +45,26 @@ On each time step the node does the following:
 2. If the node does not have the lock but received a message granting it the
    lock it acquires the lock
 3. If the node does not have the lock and is not receiving a message it does nothing
+
+## Client Server
+
+This models a network where nodes may make requests of other nodes. The safety
+property which is guaranteed is:
+
+> Every response that a node gets is in reply to a request it made
+
+### Network semantics
+
+The network here only guarantees that a message which is received by a node
+was, at some point, sent by a node. There is no guarantee that a message is
+delivered nor how many times.
+
+### Nodes
+
+On each time step nodes do the following:
+
+1. If they have received a request they immediately publish a response
+2. If they are waiting on a response but have not received it they do nothing
+3. If they are waiting on a response and have received it they mark themselves
+   as no longer waiting
+4. Otherwise they may send a request to a random node
