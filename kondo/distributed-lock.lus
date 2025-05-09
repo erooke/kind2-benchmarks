@@ -145,19 +145,19 @@ node Participant(id: HostId; nw_recv: Option<<Message>>)
 *)
 var prev_has_lock: bool^N;
 var sending: bool;
-var aquire: bool;
+var acquire: bool;
 let
   prev_has_lock[i] = i = 0 -> pre has_lock[i];
 
   sending = (not nw_recv.some) and prev_has_lock[id] and any bool;
-  aquire = nw_recv.some and nw_recv.value.dest = id;
+  acquire = nw_recv.some and nw_recv.value.dest = id;
 
   has_lock[i] =
     if id <> i then
       prev_has_lock[i]
     else if sending then
       false
-    else if aquire then
+    else if acquire then
       true
     else
       prev_has_lock[i];
