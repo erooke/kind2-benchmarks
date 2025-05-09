@@ -1,6 +1,6 @@
 include "common.lus"
 
-const N: Pos; -- Number of participants
+const N: Pos = 3; -- Number of participants
 type HostId = subtype { i : Nat | i < N };
 
 -- {{{ Message Types
