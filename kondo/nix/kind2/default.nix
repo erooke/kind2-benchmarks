@@ -9,7 +9,7 @@
 stdenv.mkDerivation {
   inherit src;
   pname = "kind2";
-  version = src.version;
+  version = src.revision;
 
   buildInputs = [
     ocamlPackages.ocaml

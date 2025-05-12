@@ -1,20 +1,17 @@
 {
   "pins": {
     "kind2": {
-      "type": "GitRelease",
+      "type": "Git",
       "repository": {
         "type": "GitHub",
         "owner": "kind2-mc",
         "repo": "kind2"
       },
-      "pre_releases": false,
-      "version_upper_bound": null,
-      "release_prefix": null,
+      "branch": "develop",
       "submodules": false,
-      "version": "v2.3.0",
-      "revision": "4888783264907805200a98ad4f38c08de996dbb9",
-      "url": "https://api.github.com/repos/kind2-mc/kind2/tarball/v2.3.0",
-      "hash": "076vqv76hmcmp5phpdmbzkcjb3n6aw94d23vgvinz9j945k7kkvm"
+      "revision": "9862a00ae04083a530dc90dfec0cba61415ef42a",
+      "url": "https://github.com/kind2-mc/kind2/archive/9862a00ae04083a530dc90dfec0cba61415ef42a.tar.gz",
+      "hash": "0wa9wflyw0km8bw7ybfjjlh33si8s1jr1khn160vajasy75wg9v0"
     },
     "nixpkgs": {
       "type": "Channel",
