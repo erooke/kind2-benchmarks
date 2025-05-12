@@ -15,3 +15,10 @@ transparent function OptSome<<T>>(value: T) returns (some: Option<<T>>);
 let
   some = Option<<T>> { some = true; value = value };
 tel
+
+function min(a: int; b: int) returns ( c: int );
+let
+  c = if a < b
+      then a
+      else b;
+tel

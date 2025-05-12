@@ -1,9 +1,9 @@
 include "common.lus"
 
-const N: Pos = 3; -- Number of participants
+const N: Pos = 2; -- Number of participants
 type HostId = subtype { i : Nat | i < N };
 
-const MaxEpoch: Pos = 3; -- Number of epochs allowed
+const MaxEpoch: Pos = 5; -- Number of epochs allowed
 type Epoch = subtype { i : Nat | i < MaxEpoch };
 
 -- {{{ Message Types
@@ -14,188 +14,247 @@ type Message = struct {
   epoch: Epoch;
 };
 
+node SendLock(sender: HostId; epoch: Epoch) returns (m: Message);
+let
+  m = Message {
+    sender = sender;
+    dest = any { hid: HostId | hid <> sender };
+    epoch = min(epoch + 1, MaxEpoch - 1);
+  };
+tel
+
 type MsgSet = bool^N^N^MaxEpoch;
 
 const EmptySet: MsgSet = false^N^N^MaxEpoch;
 
 function AddMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
-(* @contract
+(*@contract
   guarantee "Message is added"
-  MsgInSet(svm_out, msg);
+    MsgInSet(svm_out, msg);
+
+  guarantee "Only message is added"
+    forall (m: Message)
+      (MsgInSet(svm_out, m) and not MsgInSet(svm_in, m))
+        => m = msg;
 *)
 let
   svm_out[i][j][k] =
-    if i = msg.sender and j = msg.dest and k = msg.epoch then
-      true
-    else
-      svm_in[i][j][k];
+    (i = msg.epoch and j = msg.sender and k = msg.dest) or
+    svm_in[i][j][k];
 tel
 
 function MsgInSet(svm: MsgSet; msg: Message) returns (contained: bool);
 let
-  contained = svm[msg.sender][msg.dest][msg.epoch];
+  contained = svm[msg.epoch][msg.sender][msg.dest];
 tel
 -- }}}
 
 -- {{{ Network
-node Network(turn: HostId; send: Option<<Message>>) returns
-  (recv: Option<<Message>>; inFlight: MsgSet);
+node Network(send: Option<<Message>>) returns
+  (recv: Option<<Message>>; seen_messages: MsgSet);
 (*@contract
+  var prev_seen_messages : MsgSet = EmptySet -> pre seen_messages;
 
-  assume "Sends come from turn"
-  send.some => send.value.sender = turn;
+  guarantee "Send implies seen message"
+    send.some
+      => MsgInSet(seen_messages, send.value);
 
-  assume "No one sends to self"
-  send.some => send.value.dest <> send.value.sender;
+  guarantee "Receive implies seen"
+    recv.some
+      => MsgInSet(seen_messages, recv.value);
 
-  guarantee "Recv goes to turn"
-  recv.some =>
-    recv.value.dest = turn;
+  guarantee "Seen is monotonic"
+    forall (m : Message)
+      MsgInSet(prev_seen_messages, m)
+        => MsgInSet(seen_messages, m);
 
-  guarantee "Recieved messages are in flight"
-  recv.some => (false -> MsgInSet(pre inFlight, recv.value));
-
-  guarantee "Sent messages are in flight"
-  send.some => MsgInSet(inFlight, send.value);
-
-  guarantee "Messages are not in flight unless sent"
-  forall (msg : Message)
-    (
-     (true -> not MsgInSet(pre inFlight, msg)) and
-     MsgInSet(inFlight, msg)
-    ) =>
-    (send.some and send.value = msg);
+  guarantee "Seen messages were sent"
+    forall (msg: Message)
+      MsgInSet(seen_messages, msg)
+        => exists (m: history(send))
+          m.some and m.value = msg;
 
 *)
-var prevInFlight: MsgSet;
+var prev_seen_messages: MsgSet;
 let
-  prevInFlight = EmptySet -> pre inFlight;
+  prev_seen_messages = EmptySet -> pre seen_messages;
 
   recv = any {
       m: Option<<Message>> |
-      m.some =>
-        ( MsgInSet(prevInFlight, m.value) and
-          m.value.dest = turn
-        )
+      m.some => MsgInSet(prev_seen_messages, m.value)
     };
 
-  inFlight =
+  seen_messages =
     if send.some then
-      AddMsg(prevInFlight, send.value)
+      AddMsg(prev_seen_messages, send.value)
     else
-      prevInFlight;
+      prev_seen_messages;
 tel
 -- }}}
 
 -- {{{ Participant
-node Participant(id: HostId; nw_recv: Option<<Message>>)
-  returns (nw_send: Option<<Message>>; has_lock: bool^N);
+
+type NodeState = struct {
+  nw_send: Option<<Message>>;
+  has_lock: bool;
+  epoch: Epoch;
+};
+
+node initial_state(id: HostId) returns (r: NodeState);
+let
+  r = NodeState {
+    nw_send = OptNone<<Message>>();
+    has_lock = id = 0;
+    epoch =
+      if id = 0
+      then 1
+      else 0;
+  };
+tel
+
+function can_send(state: NodeState) returns (r: bool);
+let
+  r =
+    state.has_lock and
+    state.epoch < MaxEpoch - 2
+    ;
+tel
+
+node relinquish(state: NodeState; hid: HostId) returns (r: NodeState);
+let
+  r = NodeState {
+      nw_send = OptSome<<Message>>(
+        SendLock(hid, state.epoch)
+      );
+      has_lock = false;
+      epoch = state.epoch;
+    };
+tel
+
+node obtain(state: NodeState; epoch: Epoch) returns (r: NodeState);
+let
+  r = NodeState {
+    nw_send = OptNone<<Message>>();
+    has_lock = true;
+    epoch = epoch;
+  };
+tel
+
+node no_send(state: NodeState) returns (r: NodeState);
+let
+  r = NodeState {
+      nw_send = OptNone<<Message>>();
+      has_lock = state.has_lock;
+      epoch = state.epoch;
+  };
+tel
+
+node Participant(
+  my_turn: bool;
+  id: HostId;
+  nw_recv: Option<<Message>>;
+)
+returns (
+  state: NodeState;
+);
 (*@contract
-  guarantee "Frame"
-    true ->
-      forall (i: HostId) i <> id
-        => has_lock[i] = pre has_lock[i];
+  var prev_state : NodeState = initial_state(id) -> pre state;
 
-  guarantee "Correct Sender"
-    nw_send.some =>
-      nw_send.value.sender = id;
+  guarantee "Only send if have lock"
+    state.nw_send.some
+      => prev_state.has_lock;
 
-  guarantee "Send or Recv, not both"
-    nw_send.some
-      => not nw_recv.some;
+  guarantee "Only get lock if granted"
+    (not prev_state.has_lock and state.has_lock)
+      => my_turn and
+         nw_recv.some and
+         nw_recv.value.dest = id and
+         nw_recv.value.epoch > prev_state.epoch
+         ;
 
-  guarantee "Only gain lock due to recv"
-    (id <> 0 -> not pre has_lock[id]) and has_lock[id]
-      => nw_recv.some and nw_recv.value.dest = id;
-
-  guarantee "Only lose lock due to send"
-    (id = 0 -> pre has_lock[id]) and not has_lock[id]
-      => nw_send.some;
-
-  guarantee "Only send if we have the lock"
-    nw_send.some
-      => (id = 0 -> pre has_lock[id]);
-
-  guarantee "Do not send to self"
-    nw_send.some
-      => nw_send.value.dest <> id;
+  guarantee "Lose lock iff relinquished"
+    (prev_state.has_lock and not state.has_lock)
+      = state.nw_send.some
+      ;
 *)
-var prev_has_lock: bool^N;
-var sending: bool;
-var acquire: bool;
-var prev_epoch, epoch: Epoch^N;
+var sending, acquire: bool;
+var prev_state: NodeState;
 let
 
-  prev_epoch[i] =
-    if i = 0
-    then 1 -> pre epoch[i]
-    else 0 -> pre epoch[i];
-
-  prev_has_lock[i] = i = 0 -> pre has_lock[i];
+  prev_state = initial_state(id) -> pre state;
 
   sending =
-    (not nw_recv.some) and            -- We are not receiving
-    prev_has_lock[id] and             -- We have the lock
-    (prev_epoch[id] + 1) < MaxEpoch and -- We still have epochs
-    any bool;                         -- We may send, we don't have to
-
-  acquire =
-    nw_recv.some and                         -- We received a message
-    nw_recv.value.dest = id and              -- The message is meant for us
-    nw_recv.value.epoch > prev_epoch[id] -- The received message is a higher epoch
+    my_turn and
+    not acquire and
+    can_send(prev_state) and
+    any bool
     ;
 
-  epoch[i] =
-    if id = i and acquire
-    then nw_recv.value.epoch
-    else prev_epoch[i];
+  acquire =
+    my_turn and
+    nw_recv.some and                         -- We received a message
+    nw_recv.value.dest = id and              -- The message is meant for us
+    nw_recv.value.epoch > prev_state.epoch   -- The received message is a higher epoch
+    ;
 
-  has_lock[i] =
-    if id <> i then
-      prev_has_lock[i]
-    else if sending then
-      false
-    else if acquire then
-      true
-    else
-      prev_has_lock[i];
+  state =
+    if sending
+    then relinquish(prev_state, id)
+    else if acquire
+    then obtain(prev_state, nw_recv.value.epoch)
+    else no_send(prev_state)
+    ;
 
-  nw_send =
-    if not sending then
-      OptNone<<Message>>()
-    else
-      OptSome<<Message>>(
-        Message {
-          sender = id;
-          dest = any { hid: HostId | hid <> id };
-          epoch = prev_epoch[id] + 1;
-        }
-      );
+
 tel
 -- }}}
 
 -- {{{ System
-node System()
-returns (
-  has_lock: bool^N;
-  in_flight:
-  MsgSet;
-  turn: HostId;
-  nw_recv: Option<<Message>>;
-  nw_send: Option<<Message>>
-);
+node System(turn: HostId) returns( node_states: NodeState^N )
 (*@contract
-
-  guarantee "Saftey"
-  true;
-
+  guarantee "Safety"
+    forall (i, j: HostId)
+      node_states[i].has_lock and
+      node_states[j].has_lock
+        => i = j;
 *)
+var seen_messages: MsgSet;
+var nw_recv: Option<<Message>>;
 let
-  turn = any HostId;
-  nw_recv, in_flight = Network(turn, nw_send);
-  nw_send, has_lock = Participant(turn, nw_recv);
+  node_states[i] = Participant(i = turn, i, nw_recv);
+  nw_recv, seen_messages = Network(node_states[turn].nw_send);
+
+  check "At most one in flight"
+    forall (m1, m2: Message)
+      MsgInSet(seen_messages, m1) and
+      MsgInSet(seen_messages, m2) and
+      in_flight(m1, node_states) and
+      in_flight(m2, node_states)
+        => m1 = m2;
+
+  check "Has lock implies none in flight"
+    one_has_lock(node_states)
+      => forall (m: Message)
+          MsgInSet(seen_messages, m)
+            => not in_flight(m, node_states);
+tel
+-- }}}
+
+-- {{{ Predicates
+function in_flight(m: Message; node_states: NodeState^N) returns (b: bool);
+let
+  b = node_states[m.dest].epoch < m.epoch;
 tel
 
+function one_has_lock(node_states: NodeState^N) returns (b: bool);
+var acc: bool^N;
+let
+  acc[i] =
+    if i = 0
+    then node_states[0].has_lock
+    else acc[i-1] or node_states[i].has_lock;
+  b = acc[N-1];
+tel
 -- }}}
 
 -- vim:foldmethod=marker:foldlevel=0
