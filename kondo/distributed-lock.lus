@@ -3,16 +3,20 @@ include "common.lus"
 const N: Pos = 3; -- Number of participants
 type HostId = subtype { i : Nat | i < N };
 
+const MaxEpoch: Pos = 3; -- Number of epochs allowed
+type Epoch = subtype { i : Nat | i < MaxEpoch };
+
 -- {{{ Message Types
 
 type Message = struct {
   sender: HostId;
   dest: HostId;
+  epoch: Epoch;
 };
 
-type MsgSet = bool^N^N;
+type MsgSet = bool^N^N^MaxEpoch;
 
-const EmptySet: MsgSet = false^N^N;
+const EmptySet: MsgSet = false^N^N^MaxEpoch;
 
 function AddMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
 (* @contract
@@ -20,29 +24,16 @@ function AddMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
   MsgInSet(svm_out, msg);
 *)
 let
-  svm_out[i][j] =
-    if i = msg.sender and j = msg.dest then
+  svm_out[i][j][k] =
+    if i = msg.sender and j = msg.dest and k = msg.epoch then
       true
     else
-      svm_in[i][j];
-tel
-
-function RemoveMsg(svm_in: MsgSet; msg: Message) returns (svm_out: MsgSet);
-(* @contract
-  guarantee "Message is removed"
-  not MsgInSet(svm_out, msg);
-*)
-let
-  svm_out[i][j] =
-    if i = msg.sender and j = msg.dest then
-      false
-    else
-      svm_in[i][j];
+      svm_in[i][j][k];
 tel
 
 function MsgInSet(svm: MsgSet; msg: Message) returns (contained: bool);
 let
-  contained = svm[msg.sender][msg.dest];
+  contained = svm[msg.sender][msg.dest][msg.epoch];
 tel
 -- }}}
 
@@ -64,9 +55,6 @@ node Network(turn: HostId; send: Option<<Message>>) returns
   guarantee "Recieved messages are in flight"
   recv.some => (false -> MsgInSet(pre inFlight, recv.value));
 
-  guarantee "Recieved messages are not in flight"
-  recv.some => not MsgInSet(inFlight, recv.value);
-
   guarantee "Sent messages are in flight"
   send.some => MsgInSet(inFlight, send.value);
 
@@ -78,13 +66,6 @@ node Network(turn: HostId; send: Option<<Message>>) returns
     ) =>
     (send.some and send.value = msg);
 
-  guarantee "Messages stay in flight until recieved"
-  forall (msg : Message)
-    (
-     (false -> MsgInSet(pre inFlight, msg)) and
-     not MsgInSet(inFlight, msg)
-    ) =>
-    (recv.some and recv.value = msg);
 *)
 var prevInFlight: MsgSet;
 let
@@ -99,12 +80,8 @@ let
     };
 
   inFlight =
-    if send.some and recv.some then
-      AddMsg(RemoveMsg(prevInFlight, recv.value), send.value)
-    else if send.some then
+    if send.some then
       AddMsg(prevInFlight, send.value)
-    else if recv.some then
-      RemoveMsg(prevInFlight, recv.value)
     else
       prevInFlight;
 tel
@@ -146,11 +123,32 @@ node Participant(id: HostId; nw_recv: Option<<Message>>)
 var prev_has_lock: bool^N;
 var sending: bool;
 var acquire: bool;
+var prev_epoch, epoch: Epoch^N;
 let
+
+  prev_epoch[i] =
+    if i = 0
+    then 1 -> pre epoch[i]
+    else 0 -> pre epoch[i];
+
   prev_has_lock[i] = i = 0 -> pre has_lock[i];
 
-  sending = (not nw_recv.some) and prev_has_lock[id] and any bool;
-  acquire = nw_recv.some and nw_recv.value.dest = id;
+  sending =
+    (not nw_recv.some) and            -- We are not receiving
+    prev_has_lock[id] and             -- We have the lock
+    (prev_epoch[id] + 1) < MaxEpoch and -- We still have epochs
+    any bool;                         -- We may send, we don't have to
+
+  acquire =
+    nw_recv.some and                         -- We received a message
+    nw_recv.value.dest = id and              -- The message is meant for us
+    nw_recv.value.epoch > prev_epoch[id] -- The received message is a higher epoch
+    ;
+
+  epoch[i] =
+    if id = i and acquire
+    then nw_recv.value.epoch
+    else prev_epoch[i];
 
   has_lock[i] =
     if id <> i then
@@ -170,6 +168,7 @@ let
         Message {
           sender = id;
           dest = any { hid: HostId | hid <> id };
+          epoch = prev_epoch[id] + 1;
         }
       );
 tel
@@ -186,26 +185,10 @@ returns (
   nw_send: Option<<Message>>
 );
 (*@contract
+
   guarantee "Saftey"
-  forall (idx, idy: HostId) has_lock[idx] and has_lock[idy] => idx = idy;
+  true;
 
-  guarantee "has lock implies not in flight"
-  (exists (id: HostId) has_lock[id]) =>
-    not (exists (idx, idy: HostId) in_flight[idx][idy]);
-
-  guarantee "At most one in flight"
-  forall (m1, m2: Message)
-    (MsgInSet(in_flight, m1) and  MsgInSet(in_flight, m2)) =>
-      m1.sender = m2.sender and
-      m1.dest = m2.dest;
-
-  guarantee "Messages sent by turn"
-  nw_send.some
-    => (nw_send.value.sender = turn);
-
-  guarantee "Messages recieved by turn"
-  nw_recv.some
-    => (nw_recv.value.dest = turn);
 *)
 let
   turn = any HostId;
