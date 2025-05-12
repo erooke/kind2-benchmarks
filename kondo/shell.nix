@@ -7,8 +7,11 @@ let
   kind2 = pkgs.callPackage ./nix/kind2 { src = pins.kind2; };
 in
 pkgs.mkShell {
+
   nativeBuildInputs = [
     kind2
     pkgs.z3
   ];
+
+  NPINS_DIRECTORY="./nix/npins/";
 }
