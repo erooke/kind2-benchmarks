@@ -177,17 +177,19 @@ returns (
       = state.nw_send.some
       ;
 *)
-var sending, acquire: bool;
+var sending, acquire, want_to_send: bool;
 var prev_state: NodeState;
 let
 
   prev_state = initial_state(id) -> pre state;
 
+  want_to_send = any bool;
+
   sending =
     my_turn and
     not acquire and
     can_send(prev_state) and
-    any bool
+    want_to_send
     ;
 
   acquire =
