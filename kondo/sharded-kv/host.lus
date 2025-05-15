@@ -1,10 +1,6 @@
 include "../common.lus"
 include "types.lus"
 
-
-const N: Pos = 2; -- Number of hosts
-type HostId = subtype { i : Nat | i < N };
-
 type HostState = struct {
   nw_send: Option<Message>;
   keys: KeyMap;
@@ -36,13 +32,6 @@ let
     keys = empty_km();
   };
 tel
-
-type Message = struct {
-  dest: HostId;
-  key: Key;
-  version: Version;
-};
-
 
 function imported can_send(state: HostState) returns (b: bool)
 (*@contract
@@ -86,13 +75,14 @@ let
     else state[k];
 tel
 
-node relinquish(dest: HostId; state: HostState) returns (new_state : HostState)
+node relinquish(src: HostId; dest: HostId; state: HostState) returns (new_state : HostState)
 var key: Key;
 let
   key = choose_key(state);
   new_state = HostState {
     nw_send = OptSome@<Message>(
     Message {
+        src = src;
         dest = dest;
         key = key;
         version = state.keys[key].value.version + 1;
@@ -184,7 +174,7 @@ let
 
   state =
     if sending
-    then relinquish(dest, prev_state)
+    then relinquish(host_id, dest, prev_state)
     else if acquire
     then obtain(nw_recv.value, prev_state)
     else prev_state;

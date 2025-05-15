@@ -42,7 +42,13 @@ let
   contained = svm[msg.version][msg.key][msg.src][msg.dest];
 tel
 
-function imported add_msg(svm_in: MessageSet; msg: Message) returns (svm_out: MessageSet);
+function imported random_msg(svm: MessageSet) returns (msg: Option<Message>);
+(*@contract
+  guarantee
+    msg.some => in_msg_set(svm, msg.value);
+*)
+
+function add_msg(svm_in: MessageSet; msg: Message) returns (svm_out: MessageSet);
 (*@contract
   guarantee "Message is added"
     in_msg_set(svm_out, msg);
@@ -52,4 +58,9 @@ function imported add_msg(svm_in: MessageSet; msg: Message) returns (svm_out: Me
       (in_msg_set(svm_out, m) <> in_msg_set(svm_in, m))
         => m = msg;
 *)
-
+let
+svm_out[i][j][k][l] =
+  (i = msg.version and j = msg.key and k = msg.src and l = msg.dest) or
+  svm_in[i][j][k][l]
+  ;
+tel
