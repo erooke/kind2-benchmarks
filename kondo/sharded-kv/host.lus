@@ -121,12 +121,21 @@ let
 tel
 
 
-function imported equal_states(s1: HostState; s2: HostState) returns (b: bool);
+function imported equivalent_states(s1: HostState; s2: HostState) returns (b: bool);
 (*@contract
   guarantee
     b =
       forall (k : Key) s1.keys[k] = s2.keys[k];
 *)
+
+function imported equal_states(s1: HostState; s2: HostState) returns (b: bool);
+(*@contract
+  guarantee
+    b = equivalent_states(s1, s2) and
+      forall (k : Key) s1.nw_send = s2.nw_send;
+*)
+
+-- }}}
 
 node Host(
   my_turn: bool;
@@ -139,9 +148,12 @@ returns (
 );
 (*@contract
 
+  assume "Prev state is well behaved"
+    true -> equal_states(pre state, prev_state);
+
   guarantee "Frame one"
     not my_turn
-      => equal_states(prev_state, state);
+      => equivalent_states(prev_state, state);
 
   guarantee "Frame two"
     state.nw_send.some => my_turn;
