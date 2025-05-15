@@ -1,19 +1,19 @@
 type Nat = subrange [0,*] of int;
 type Pos = subrange [1,*] of int;
 
-type Option<<T>> = struct {
+type Option<T> = struct {
   some: bool;
   value: T;
 };
 
-transparent node OptNone<<T>>() returns (none: Option<<T>>);
+transparent node OptNone<T>() returns (none: Option<T>);
 let
-  none = Option<<T>> { some = false; value = any T };
+  none = Option@<T> { some = false; value = any T };
 tel
 
-transparent function OptSome<<T>>(value: T) returns (some: Option<<T>>);
+transparent function OptSome<T>(value: T) returns (some: Option<T>);
 let
-  some = Option<<T>> { some = true; value = value };
+  some = Option@<T> { some = true; value = value };
 tel
 
 function min(a: int; b: int) returns ( c: int );
