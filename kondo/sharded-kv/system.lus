@@ -12,7 +12,9 @@ returns ( host_states: State );
 (*@contract
 
   assume "Initial System State"
-    disjoint_live_keys(init_state) -> true;
+    disjoint_live_keys(init_state) and
+    all_valid_initial(init_state)
+      -> true;
 
   guarantee "Safety"
     forall (i, j: HostId; k: Key)
@@ -91,6 +93,15 @@ function imported disjoint_live_keys(host_states: State) returns (b: bool);
       has_live_key(host_states[i], k) and
       has_live_key(host_states[j], k)
         => i = j;
+*)
+
+(* TODO I can't seem to make `initial_state` inlinable so I had to redef this *)
+function imported all_valid_initial(host_states: State) returns (b: bool);
+(*@contract
+  guarantee
+    b = forall (i: HostId; k: Key)
+      host_states[i].keys[k].version = 0
+      ;
 *)
 
 -- }}}
