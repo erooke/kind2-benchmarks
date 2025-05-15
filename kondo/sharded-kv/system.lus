@@ -2,7 +2,13 @@ include "../common.lus"
 include "./network.lus"
 include "./host.lus"
 
-node System(turn: HostId) returns ( host_states: HostState^N );
+type State = HostState^N;
+
+node System(
+  turn: HostId;
+  init_state: State;
+  )
+returns ( host_states: State );
 (*@contract
   guarantee "Safety"
     forall (i, j: HostId; k: Key)
@@ -13,7 +19,7 @@ node System(turn: HostId) returns ( host_states: HostState^N );
 var seen_messages: MessageSet;
 var nw_recv: Option<Message>;
 let
-  host_states[i] = Host(i = turn, i, nw_recv);
+  host_states[i] = Host(i = turn, i, (init_state[i] -> (pre host_states)[i]),  nw_recv);
   nw_recv, seen_messages = Network(host_states[turn].nw_send);
 
   check at_most_one_in_flight(seen_messages, host_states);

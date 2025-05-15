@@ -127,14 +127,13 @@ function imported equal_states(s1: HostState; s2: HostState) returns (b: bool);
 node Host(
   my_turn: bool;
   host_id: HostId;
+  prev_state: HostState;
   nw_recv: Option<Message>;
 )
 returns (
   state: HostState;
 );
 (*@contract
-  var prev_state : HostState = initial_state() -> pre state;
-
   guarantee "Frame one"
     not my_turn
       => equal_states(prev_state, state);
@@ -149,13 +148,10 @@ returns (
         ;
 *)
 var sending, acquire, want_to_send: bool;
-var prev_state : HostState;
 var dest: HostId;
 let
-  prev_state =  initial_state() -> pre state;
   want_to_send = any bool;
   dest = any { hid: HostId | hid <> host_id };
-
 
   acquire =
     my_turn and
