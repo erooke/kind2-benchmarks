@@ -1,6 +1,8 @@
 include "../common.lus"
 include "types.lus"
 
+-- {{{ HostState
+
 type HostState = struct {
   nw_send: Option<Message>;
   keys: KeyMap;
@@ -191,3 +193,5 @@ let
     then obtain(nw_recv.value, prev_state)
     else prev_state;
 tel
+
+-- vim:foldmethod=marker:foldlevel=0
