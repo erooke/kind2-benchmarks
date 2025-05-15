@@ -135,6 +135,14 @@ let
     };
 tel
 
+
+function imported equal_states(s1: HostState; s2: HostState) returns (b: bool);
+(*@contract
+  guarantee
+    b =
+      forall (k : Key) s1.keys[k] = s2.keys[k];
+*)
+
 node Host(
   my_turn: bool;
   host_id: HostId;
@@ -143,6 +151,18 @@ node Host(
 returns (
   state: HostState;
 );
+(*@contract
+  var prev_state : HostState = initial_state() -> pre state;
+
+  guarantee "Frame one"
+    not my_turn
+      => equal_states(prev_state, state);
+
+  guarantee "Frame two"
+    state.nw_send.some => my_turn;
+
+
+*)
 var sending, acquire, want_to_send: bool;
 var prev_state : HostState;
 var dest: HostId;
