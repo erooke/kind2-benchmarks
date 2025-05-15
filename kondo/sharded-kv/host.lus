@@ -1,0 +1,176 @@
+include "../common.lus"
+
+const MaxKeys: Pos = 2; -- Number of unique keys
+type Key = subtype { i : Nat | i < MaxKeys };
+
+const MaxVersion: Pos = 2; -- Number of allowed versions
+type Version = subtype { i : Nat | i < MaxVersion };
+
+const N: Pos = 2; -- Number of hosts
+type HostId = subtype { i : Nat | i < N };
+
+type Entry = struct {
+  is_live: bool;
+  version: Version;
+};
+
+type HostState = struct {
+  nw_send: Option<Message>;
+  keys: Option<Entry>^MaxKeys;
+};
+
+node initial_state() returns (h: HostState);
+let
+  h = HostState {
+    nw_send = OptNone@<Message>();
+    keys = Option@<Entry> {
+      some = false;
+      value = Entry {
+        is_live = false;
+        version = 0;
+      };
+    }^MaxKeys;
+  };
+tel
+
+function has_key(k: Key; state: HostState) returns (b: bool)
+let
+  b = state.keys[k].some;
+tel
+
+type Message = struct {
+  dest: HostId;
+  key: Key;
+  version: Version;
+};
+
+
+function has_live_key(k: Key; state: HostState) returns (b: bool)
+let
+  b =
+    state.keys[k].some and
+    state.keys[k].value.is_live
+    ;
+tel
+
+function imported can_send(state: HostState) returns (b: bool)
+(*@contract
+  guarantee "Can send iff we have a live key"
+    b =
+      exists (k : Key) has_live_key(k, state) and
+      state.keys[k].value.version + 1 < MaxVersion
+      ;
+*)
+
+function valid_receive(m: Message; state: HostState) returns (b : bool)
+let
+  b =
+    not has_key(m.key, state) or
+    m.version > state.keys[m.key].value.version
+    ;
+tel
+
+function imported choose_key(state: HostState) returns (key : Key)
+(*@contract
+  guarantee "picks a random key"
+    has_live_key(key, state);
+*)
+
+function kill_entry(entry: Option<Entry>) returns (dead_entry: Option<Entry>);
+let
+  dead_entry =
+    if not entry.some
+    then entry
+    else OptSome@<Entry>(Entry {
+      is_live = false;
+      version = entry.value.version;
+      } );
+tel
+
+function drop_key(key: Key; state: Option<Entry>^MaxKeys) returns (new_state: Option<Entry>^MaxKeys);
+let
+  new_state[k] =
+    if k = key
+    then kill_entry(state[k])
+    else state[k];
+tel
+
+node relinquish(dest: HostId; state: HostState) returns (new_state : HostState)
+var key: Key;
+let
+  key = choose_key(state);
+  new_state = HostState {
+    nw_send = OptSome@<Message>(
+    Message {
+        dest = dest;
+        key = key;
+        version = state.keys[key].value.version + 1;
+      }
+    );
+    keys = drop_key(key, state.keys);
+  };
+tel
+
+function set_key(msg: Message; keys: Option<Entry>^MaxKeys) returns (new_keys: Option<Entry>^MaxKeys);
+let
+  new_keys[k] =
+    if k = msg.key
+    then OptSome@<Entry>(Entry {is_live = true; version = msg.version;})
+    else keys[k];
+tel
+
+node obtain(msg: Message; state: HostState) returns (new_state : HostState)
+let
+  new_state = HostState {
+    nw_send = OptNone@<Message>();
+    keys = set_key(msg, state.keys);
+  };
+tel
+
+node no_send(state : HostState) returns (new_state: HostState);
+let
+  new_state = HostState{
+      nw_send = OptNone@<Message>();
+      keys = state.keys;
+    };
+tel
+
+node Host(
+  my_turn: bool;
+  host_id: HostId;
+  nw_recv: Option<Message>;
+)
+returns (
+  state: HostState;
+);
+var sending, acquire, want_to_send: bool;
+var prev_state : HostState;
+var dest: HostId;
+let
+  prev_state =  initial_state() -> pre state;
+  want_to_send = any bool;
+  dest = any { hid: HostId | hid <> host_id };
+
+
+  acquire =
+    my_turn and
+    nw_recv.some and
+    nw_recv.value.dest = host_id and
+    valid_receive(nw_recv.value, prev_state)
+    ;
+
+  sending =
+    my_turn and
+    not acquire and
+    want_to_send and
+    can_send(prev_state)
+    ;
+
+
+  state =
+    if sending
+    then relinquish(dest, prev_state)
+    else if acquire
+    then obtain(nw_recv.value, prev_state)
+    else prev_state;
+tel
