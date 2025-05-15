@@ -1,0 +1,74 @@
+include "../common.lus"
+include "./network.lus"
+include "./host.lus"
+
+node System(turn: HostId) returns ( host_states: HostState^N );
+(*@contract
+  guarantee "Safety"
+    forall (i, j: HostId; k: Key)
+      has_live_key(host_states[i], k) and
+      has_live_key(host_states[j], k)
+        => i = j;
+*)
+var seen_messages: MessageSet;
+var nw_recv: Option<Message>;
+let
+  host_states[i] = Host(i = turn, i, nw_recv);
+  nw_recv, seen_messages = Network(host_states[turn].nw_send);
+
+  check at_most_one_in_flight(seen_messages, host_states);
+tel
+
+
+function key_in_flight_by_message(
+  m: Message;
+  seen_messages: MessageSet;
+  host_states: HostState^N;
+  key: Key
+) returns (b: bool);
+let
+  b =
+    in_msg_set(seen_messages, m) and
+    m.key = key and
+    has_key(host_states[m.dest], key) and
+    get(host_states[m.dest], key).version < m.version
+    ;
+tel
+
+function imported key_in_flight(
+  seen_messages: MessageSet;
+  host_states: HostState^N;
+  key: Key
+) returns (b: bool);
+(*@contract
+  guarantee
+    b = exists (m:Message) key_in_flight_by_message(m, seen_messages, host_states, key);
+*)
+
+function imported at_most_one_in_flight(seen_messages: MessageSet; host_states: HostState^N) returns (b: bool);
+(*@contract
+  guarantee
+    forall (m1, m2: Message; key: Key)
+      key_in_flight_by_message(m1, seen_messages, host_states, key) and
+      key_in_flight_by_message(m2, seen_messages, host_states, key)
+        => m1 = m2
+        ;
+
+*)
+
+function imported none_has_live_key(host_states: HostState^N; key: Key) returns (b: bool);
+(*@contract
+  guarantee
+    b = forall (i : HostId) not has_live_key(host_states[i], key);
+*)
+
+
+function imported live_key_implies_none_in_flight(seen_messages: MessageSet; host_states: HostState^N)
+returns (b: bool);
+(* @contract
+  guarantee
+    b = forall (key: Key)
+      key_in_flight(seen_messages, host_states, key)
+        => none_has_live_key(host_states)
+        ;
+*)
