@@ -1,5 +1,8 @@
 include "../common.lus"
 
+const N: Pos = 2; -- Number of hosts
+type HostId = subtype { i : Nat | i < N };
+
 const MaxKeys: Pos = 2; -- Number of unique keys
 type Key = subtype { i : Nat | i < MaxKeys };
 
@@ -23,3 +26,30 @@ let
       };
     }^MaxKeys;
 tel
+
+type Message = struct {
+  src: HostId;
+  dest: HostId;
+  key: Key;
+  version: Version;
+};
+
+type MessageSet = bool^N^N^MaxKeys^MaxVersion;
+const EmptySet : MessageSet = false^N^N^MaxKeys^MaxVersion;
+
+function in_msg_set(svm: MessageSet; msg: Message) returns (contained: bool);
+let
+  contained = svm[msg.version][msg.key][msg.src][msg.dest];
+tel
+
+function imported add_msg(svm_in: MessageSet; msg: Message) returns (svm_out: MessageSet);
+(*@contract
+  guarantee "Message is added"
+    in_msg_set(svm_out, msg);
+
+  guarantee "The only change is the message"
+    forall (m: Message)
+      (in_msg_set(svm_out, m) <> in_msg_set(svm_in, m))
+        => m = msg;
+*)
+
