@@ -51,24 +51,31 @@ tel
 
 function imported choose_key(state: HostState) returns (key : Key)
 (*@contract
-  guarantee "picks a random key"
+  guarantee
     has_live_key(state, key);
 *)
 
-function kill_entry(entry: Entry) returns (dead_entry: Entry);
-let
-  dead_entry =
-    Entry {
-      is_live = false;
-      version = entry.version;
-    };
-tel
-
 function drop_key(key: Key; state: KeyMap) returns (new_state: KeyMap);
+(*@contract
+  guarantee
+    not new_state[key].is_live and
+    state[key].version = new_state[key].version
+    ;
+
+  guarantee
+    forall (k: Key)
+      state[k] <> new_state[k]
+        => k = key
+      ;
+*)
 let
   new_state[k] =
     if k = key
-    then kill_entry(state[k])
+    then
+      Entry {
+        is_live = false;
+        version = state[k].version;
+      }
     else state[k];
 tel
 
