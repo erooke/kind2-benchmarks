@@ -10,6 +10,10 @@ node System(
   )
 returns ( host_states: State );
 (*@contract
+
+  assume "Initial System State"
+    disjoint_live_keys(init_state) -> true;
+
   guarantee "Safety"
     forall (i, j: HostId; k: Key)
       has_live_key(host_states[i], k) and
