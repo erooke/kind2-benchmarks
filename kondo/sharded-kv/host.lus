@@ -1,46 +1,40 @@
 include "../common.lus"
+include "types.lus"
 
-const MaxKeys: Pos = 2; -- Number of unique keys
-type Key = subtype { i : Nat | i < MaxKeys };
-
-const MaxVersion: Pos = 2; -- Number of allowed versions
-type Version = subtype { i : Nat | i < MaxVersion };
 
 const N: Pos = 2; -- Number of hosts
 type HostId = subtype { i : Nat | i < N };
 
-type Entry = struct {
-  is_live: bool;
-  version: Version;
-};
-
 type HostState = struct {
   nw_send: Option<Message>;
-  keys: Option<Entry>^MaxKeys;
+  keys: KeyMap;
 };
+
+transparent function has_key(state: HostState; k: Key) returns (b: bool);
+let
+  b = state.keys[k].some;
+tel
+
+transparent function get(state: HostState; k: Key) returns (e: Entry);
+let
+  e = state.keys[k].value;
+tel
+
+transparent function has_live_key(state: HostState; k: Key) returns (b: bool);
+let
+  b =
+    has_key(state, k) and
+    get(state, k).is_live
+    ;
+tel
+
 
 node initial_state() returns (h: HostState);
 let
   h = HostState {
     nw_send = OptNone@<Message>();
-    keys = Option@<Entry> {
-      some = false;
-      value = Entry {
-        is_live = false;
-        version = 0;
-      };
-    }^MaxKeys;
+    keys = empty_km();
   };
-tel
-
-transparent function has_key(k: Key; state: HostState) returns (b: bool)
-let
-  b = state.keys[k].some;
-tel
-
-transparent function get_key(k: Key; state: HostState) returns (e: Entry)
-let
-  e = state.keys[k].value;
 tel
 
 type Message = struct {
@@ -50,35 +44,27 @@ type Message = struct {
 };
 
 
-function has_live_key(k: Key; state: HostState) returns (b: bool)
-let
-  b =
-    state.keys[k].some and
-    state.keys[k].value.is_live
-    ;
-tel
-
 function imported can_send(state: HostState) returns (b: bool)
 (*@contract
-  guarantee "Can send iff we have a live key"
+  guarantee "Can send iff young and live key"
     b =
-      exists (k : Key) has_live_key(k, state) and
-      state.keys[k].value.version + 1 < MaxVersion
+      exists (k : Key) has_live_key(state, k) and
+      get(state, k).version + 1 < MaxVersion
       ;
 *)
 
 function valid_receive(m: Message; state: HostState) returns (b : bool)
 let
   b =
-    not has_key(m.key, state) or
-    m.version > state.keys[m.key].value.version
+    not has_key(state, m.key) or
+    m.version > get(state, m.key).version
     ;
 tel
 
 function imported choose_key(state: HostState) returns (key : Key)
 (*@contract
   guarantee "picks a random key"
-    has_live_key(key, state);
+    has_live_key(state, key);
 *)
 
 function kill_entry(entry: Option<Entry>) returns (dead_entry: Option<Entry>);
@@ -168,8 +154,8 @@ returns (
 
   guarantee "Monotonic state"
     forall (k : Key)
-      has_key(k, prev_state) and has_key(k, state)
-        =>  get_key(k, prev_state).version <= get_key(k, state).version
+      has_key(prev_state, k) and has_key(state, k)
+        =>  get(prev_state, k).version <= get(state, k).version
         ;
 *)
 var sending, acquire, want_to_send: bool;
