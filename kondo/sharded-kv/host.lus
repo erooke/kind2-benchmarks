@@ -28,13 +28,18 @@ let
   };
 tel
 
+function can_send_key(state: HostState; key: Key) returns (b: bool);
+let
+  b =
+    has_live_key(state, key) and
+    get(state, key).version + 1 < MaxVersion
+    ;
+tel
+
 function imported can_send(state: HostState) returns (b: bool)
 (*@contract
   guarantee "Can send iff young and live key"
-    b =
-      exists (k : Key) has_live_key(state, k) and
-      get(state, k).version + 1 < MaxVersion
-      ;
+    b = exists (k : Key) can_send_key(state,k) ;
 *)
 
 function valid_receive(m: Message; state: HostState) returns (b : bool)
