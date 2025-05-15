@@ -33,9 +33,14 @@ let
   };
 tel
 
-function has_key(k: Key; state: HostState) returns (b: bool)
+transparent function has_key(k: Key; state: HostState) returns (b: bool)
 let
   b = state.keys[k].some;
+tel
+
+transparent function get_key(k: Key; state: HostState) returns (e: Entry)
+let
+  e = state.keys[k].value;
 tel
 
 type Message = struct {
@@ -161,7 +166,11 @@ returns (
   guarantee "Frame two"
     state.nw_send.some => my_turn;
 
-
+  guarantee "Monotonic state"
+    forall (k : Key)
+      has_key(k, prev_state) and has_key(k, state)
+        =>  get_key(k, prev_state).version <= get_key(k, state).version
+        ;
 *)
 var sending, acquire, want_to_send: bool;
 var prev_state : HostState;
