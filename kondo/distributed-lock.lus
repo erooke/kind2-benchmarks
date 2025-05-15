@@ -1,9 +1,9 @@
 include "common.lus"
 
-const N: Pos = 2; -- Number of participants
+const N: Pos = 3; -- Number of participants
 type HostId = subtype { i : Nat | i < N };
 
-const MaxEpoch: Pos = 5; -- Number of epochs allowed
+const MaxEpoch: subrange[2, *] of int; -- Number of epochs allowed
 type Epoch = subtype { i : Nat | i < MaxEpoch };
 
 -- {{{ Message Types
@@ -50,8 +50,8 @@ tel
 -- }}}
 
 -- {{{ Network
-node Network(send: Option<<Message>>) returns
-  (recv: Option<<Message>>; seen_messages: MsgSet);
+node Network(send: Option<Message>) returns
+  (recv: Option<Message>; seen_messages: MsgSet);
 (*@contract
   var prev_seen_messages : MsgSet = EmptySet -> pre seen_messages;
 
@@ -80,7 +80,7 @@ let
   prev_seen_messages = EmptySet -> pre seen_messages;
 
   recv = any {
-      m: Option<<Message>> |
+      m: Option<Message> |
       m.some => MsgInSet(prev_seen_messages, m.value)
     };
 
@@ -95,7 +95,7 @@ tel
 -- {{{ Participant
 
 type NodeState = struct {
-  nw_send: Option<<Message>>;
+  nw_send: Option<Message>;
   has_lock: bool;
   epoch: Epoch;
 };
@@ -103,7 +103,7 @@ type NodeState = struct {
 node initial_state(id: HostId) returns (r: NodeState);
 let
   r = NodeState {
-    nw_send = OptNone<<Message>>();
+    nw_send = OptNone@<Message>();
     has_lock = id = 0;
     epoch =
       if id = 0
@@ -123,7 +123,7 @@ tel
 node relinquish(state: NodeState; hid: HostId) returns (r: NodeState);
 let
   r = NodeState {
-      nw_send = OptSome<<Message>>(
+      nw_send = OptSome@<Message>(
         SendLock(hid, state.epoch)
       );
       has_lock = false;
@@ -134,7 +134,7 @@ tel
 node obtain(state: NodeState; epoch: Epoch) returns (r: NodeState);
 let
   r = NodeState {
-    nw_send = OptNone<<Message>>();
+    nw_send = OptNone@<Message>();
     has_lock = true;
     epoch = epoch;
   };
@@ -143,7 +143,7 @@ tel
 node no_send(state: NodeState) returns (r: NodeState);
 let
   r = NodeState {
-      nw_send = OptNone<<Message>>();
+      nw_send = OptNone@<Message>();
       has_lock = state.has_lock;
       epoch = state.epoch;
   };
@@ -152,7 +152,7 @@ tel
 node Participant(
   my_turn: bool;
   id: HostId;
-  nw_recv: Option<<Message>>;
+  nw_recv: Option<Message>;
 )
 returns (
   state: NodeState;
@@ -219,7 +219,7 @@ node System(turn: HostId) returns( node_states: NodeState^N )
         => i = j;
 *)
 var seen_messages: MsgSet;
-var nw_recv: Option<<Message>>;
+var nw_recv: Option<Message>;
 let
   node_states[i] = Participant(i = turn, i, nw_recv);
   nw_recv, seen_messages = Network(node_states[turn].nw_send);
