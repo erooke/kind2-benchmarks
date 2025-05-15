@@ -25,6 +25,7 @@ let
   check at_most_one_in_flight(seen_messages, host_states);
 tel
 
+-- {{{ Predicates
 
 function key_in_flight_by_message(
   m: Message;
@@ -36,10 +37,10 @@ let
   b =
     in_msg_set(seen_messages, m) and
     m.key = key and
-    has_key(host_states[m.dest], key) and
     get(host_states[m.dest], key).version < m.version
     ;
 tel
+
 
 function imported key_in_flight(
   seen_messages: MessageSet;
@@ -78,3 +79,16 @@ returns (b: bool);
         => none_has_live_key(host_states)
         ;
 *)
+
+function imported disjoint_live_keys(host_states: State) returns (b: bool);
+(*@contract
+  guarantee
+    b = forall(i, j : HostId; k: Key)
+      has_live_key(host_states[i], k) and
+      has_live_key(host_states[j], k)
+        => i = j;
+*)
+
+-- }}}
+
+-- vim:foldmethod=marker:foldlevel=0

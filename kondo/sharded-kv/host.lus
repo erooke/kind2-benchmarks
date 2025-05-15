@@ -6,20 +6,15 @@ type HostState = struct {
   keys: KeyMap;
 };
 
-transparent function has_key(state: HostState; k: Key) returns (b: bool);
-let
-  b = state.keys[k].some;
-tel
 
 transparent function get(state: HostState; k: Key) returns (e: Entry);
 let
-  e = state.keys[k].value;
+  e = state.keys[k];
 tel
 
 transparent function has_live_key(state: HostState; k: Key) returns (b: bool);
 let
   b =
-    has_key(state, k) and
     get(state, k).is_live
     ;
 tel
@@ -45,7 +40,6 @@ function imported can_send(state: HostState) returns (b: bool)
 function valid_receive(m: Message; state: HostState) returns (b : bool)
 let
   b =
-    not has_key(state, m.key) or
     m.version > get(state, m.key).version
     ;
 tel
@@ -56,18 +50,16 @@ function imported choose_key(state: HostState) returns (key : Key)
     has_live_key(state, key);
 *)
 
-function kill_entry(entry: Option<Entry>) returns (dead_entry: Option<Entry>);
+function kill_entry(entry: Entry) returns (dead_entry: Entry);
 let
   dead_entry =
-    if not entry.some
-    then entry
-    else OptSome@<Entry>(Entry {
+    Entry {
       is_live = false;
-      version = entry.value.version;
-      } );
+      version = entry.version;
+    };
 tel
 
-function drop_key(key: Key; state: Option<Entry>^MaxKeys) returns (new_state: Option<Entry>^MaxKeys);
+function drop_key(key: Key; state: KeyMap) returns (new_state: KeyMap);
 let
   new_state[k] =
     if k = key
@@ -85,18 +77,18 @@ let
         src = src;
         dest = dest;
         key = key;
-        version = state.keys[key].value.version + 1;
+        version = get(state, key).version + 1;
       }
     );
     keys = drop_key(key, state.keys);
   };
 tel
 
-function set_key(msg: Message; keys: Option<Entry>^MaxKeys) returns (new_keys: Option<Entry>^MaxKeys);
+function set_key(msg: Message; keys: KeyMap) returns (new_keys: KeyMap);
 let
   new_keys[k] =
     if k = msg.key
-    then OptSome@<Entry>(Entry {is_live = true; version = msg.version;})
+    then Entry {is_live = true; version = msg.version;}
     else keys[k];
 tel
 
@@ -134,6 +126,7 @@ returns (
   state: HostState;
 );
 (*@contract
+
   guarantee "Frame one"
     not my_turn
       => equal_states(prev_state, state);
@@ -143,8 +136,7 @@ returns (
 
   guarantee "Monotonic state"
     forall (k : Key)
-      has_key(prev_state, k) and has_key(state, k)
-        =>  get(prev_state, k).version <= get(state, k).version
+        get(prev_state, k).version <= get(state, k).version
         ;
 *)
 var sending, acquire, want_to_send: bool;
