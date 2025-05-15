@@ -9,15 +9,15 @@
       },
       "branch": "develop",
       "submodules": false,
-      "revision": "9862a00ae04083a530dc90dfec0cba61415ef42a",
-      "url": "https://github.com/kind2-mc/kind2/archive/9862a00ae04083a530dc90dfec0cba61415ef42a.tar.gz",
-      "hash": "0wa9wflyw0km8bw7ybfjjlh33si8s1jr1khn160vajasy75wg9v0"
+      "revision": "bbe22ccec8dd27928e950b646a0888825011864c",
+      "url": "https://github.com/kind2-mc/kind2/archive/bbe22ccec8dd27928e950b646a0888825011864c.tar.gz",
+      "hash": "00mzqzadjqqyi5m8ym3ym249qjvirfzx0lz6ff749ksqcpzrpyij"
     },
     "nixpkgs": {
       "type": "Channel",
       "name": "nixpkgs-unstable",
-      "url": "https://releases.nixos.org/nixpkgs/nixpkgs-25.05pre796313.b3582c75c7f2/nixexprs.tar.xz",
-      "hash": "1hy9mx89v6vcb2jwqa1dfpqnalc2pak27r7d82v3w6j5fhbbh34j"
+      "url": "https://releases.nixos.org/nixpkgs/nixpkgs-25.05pre798761.eaeed9530c76/nixexprs.tar.xz",
+      "hash": "1k7j5zk62nx7zwdfcxslxkrsny81xydg6874xdg1i4272fmg8szy"
     }
   },
   "version": 5
