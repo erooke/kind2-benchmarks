@@ -1,0 +1,29 @@
+include "../common.lus"
+include "./network.lus"
+include "./client.lus"
+include "./server.lus"
+
+type HostClass = enum {None, Server, Client};
+
+type Token_Holder = struct {
+  class: HostClass;
+  id: HostId;
+};
+
+function is_turn(class: HostClass; hid: HostId; tk_holder: Token_Holder) returns ( b: bool);
+let
+  b =
+    tk_holder.class = class and
+    tk_holder.id = hid
+    ;
+tel
+
+node System(tk_holder: Token_Holder) returns (serverStates: ServerState^N;);
+let
+  serverStates[i] =
+    Server(
+      false,
+      0,
+      OptNone@<Message>()
+    );
+tel

@@ -1,0 +1,40 @@
+include "../common.lus"
+include "./types.lus"
+
+node Network(send: Option<Message>) returns
+  (recv: Option<Message>; seen_messages: MessageSet);
+(*@contract
+  var prev_seen_messages : MessageSet = EmptySet -> pre seen_messages;
+
+  guarantee "Send implies seen message"
+    send.some
+      => in_msg_set(seen_messages, send.value);
+
+  guarantee "Receive implies seen"
+    recv.some
+      => in_msg_set(seen_messages, recv.value);
+
+  guarantee "Seen is monotonic"
+    forall (m : Message)
+      in_msg_set(prev_seen_messages, m)
+        => in_msg_set(seen_messages, m);
+
+  guarantee "Seen messages were sent"
+    forall (msg: Message)
+      in_msg_set(seen_messages, msg)
+        => exists (m: history(send))
+          m.some and m.value = msg;
+
+*)
+var prev_seen_messages: MessageSet;
+let
+  prev_seen_messages = EmptySet -> pre seen_messages;
+
+  recv = random_msg(prev_seen_messages);
+
+  seen_messages =
+    if send.some then
+      add_msg(prev_seen_messages, send.value)
+    else
+      prev_seen_messages;
+tel

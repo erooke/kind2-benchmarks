@@ -1,0 +1,78 @@
+include "../common.lus"
+include "types.lus"
+
+-- {{{ Server State
+type ServerState = struct {
+  has_lock: bool;
+  epoch: Epoch;
+  nw_send: Option<Message>;
+};
+
+node InitServerState() returns(state: ServerState);
+let
+state = ServerState {
+  has_lock = true;
+  epoch = 0;
+  nw_send = OptNone@<Message>();
+};
+tel
+
+node ServerSendState(state: ServerState; src: HostId; dest: HostId) returns (new_state: ServerState);
+var new_epoch: Epoch;
+let
+  new_epoch = min(state.epoch + 1, MaxEpoch - 1);
+  new_state = ServerState {
+    has_lock = false;
+    epoch = new_epoch;
+    nw_send = OptSome@<Message>(Message {
+        kind = Grant;
+        src = src;
+        dest = dest;
+        epoch = new_epoch;
+      });
+  };
+tel
+
+-- }}}
+
+
+node Server(
+  my_turn: bool;
+  host_id: HostId;
+  nw_recv: Option<Message>;
+) returns (state: ServerState);
+var prev_state: ServerState;
+var send_to: Option<HostId>;
+var acquire, release: bool;
+let
+  prev_state = InitServerState() -> pre state;
+
+  send_to = any { hid : Option<HostId> |
+    hid.some => prev_state.has_lock and
+    prev_state.epoch + 1 < MaxEpoch
+  };
+
+  acquire =
+    my_turn and
+    nw_recv.some and
+    nw_recv.value.dest = host_id and
+    nw_recv.value.kind = Release and
+    nw_recv.value.epoch = prev_state.epoch
+    ;
+
+  release =
+    my_turn and
+    not acquire and
+    send_to.some
+    ;
+
+  state =
+    if acquire
+    then ServerState { has_lock = true; epoch = prev_state.epoch; nw_send = OptNone@<Message>()}
+    else if release
+    then ServerSendState(prev_state, host_id, send_to.value)
+    else prev_state;
+
+tel
+
+-- vim:foldmethod=marker:foldlevel=0

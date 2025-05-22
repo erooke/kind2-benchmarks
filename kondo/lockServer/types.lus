@@ -1,0 +1,52 @@
+include "../common.lus"
+
+const N: Pos = 2; -- Number of hosts
+type HostId = subtype { i : Nat | i < N };
+
+const MaxEpoch: Pos = 2; -- Number of allowed versions
+type Epoch = subtype { i : Nat | i < MaxEpoch };
+
+type MessageKind = enum { Grant, Release };
+
+transparent function kind_to_int(kind: MessageKind) returns (r: subtype { i : Nat | i < 2 })
+let
+  r = if kind = Grant then 0 else 1;
+tel
+
+type Message = struct {
+  kind: MessageKind;
+  src: HostId;
+  dest: HostId;
+  epoch: Epoch;
+};
+
+type MessageSet = bool^2^N^N^MaxEpoch;
+const EmptySet : MessageSet = false^2^N^N^MaxEpoch;
+
+function in_msg_set(svm: MessageSet; msg: Message) returns (contained: bool);
+let
+  contained = svm[msg.epoch][msg.src][msg.dest][kind_to_int(msg.kind)];
+tel
+
+function imported random_msg(svm: MessageSet) returns (msg: Option<Message>);
+(*@contract
+  guarantee
+    msg.some => in_msg_set(svm, msg.value);
+*)
+
+function add_msg(svm_in: MessageSet; msg: Message) returns (svm_out: MessageSet);
+(*@contract
+  guarantee "Message is added"
+    in_msg_set(svm_out, msg);
+
+  guarantee "The only change is the message"
+    forall (m: Message)
+      (in_msg_set(svm_out, m) <> in_msg_set(svm_in, m))
+        => m = msg;
+*)
+let
+svm_out[i][j][k][l] =
+  (i = msg.epoch and j = msg.src and k = msg.dest and l = kind_to_int(msg.kind)) or
+  svm_in[i][j][k][l]
+  ;
+tel

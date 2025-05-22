@@ -1,0 +1,110 @@
+include "../common.lus"
+include "types.lus"
+
+-- {{{ Client State
+type ClientState = struct {
+  has_lock: bool^N;
+  epoch: Epoch^N;
+  nw_send: Option<Message>;
+};
+
+
+node InitState() returns (state: ClientState);
+let
+  state = ClientState {
+    has_lock = false^N;
+    epoch = 0^N;
+    nw_send = OptNone@<Message>();
+  };
+tel
+
+function valid_grant(state: ClientState; message: Message) returns (b: bool);
+var server: HostId;
+let
+  server = message.src;
+  b =
+    message.kind = Grant and
+    not state.has_lock[server] and
+    message.epoch > state.epoch[server];
+tel
+
+function set_has_lock(has_lock: bool^N; host_id: HostId; val: bool) returns (new_has_lock: bool^N);
+let
+  new_has_lock[i] =
+    if host_id = i
+    then val
+    else has_lock[i];
+tel
+
+function set_epoch(epoch: Epoch^N; host_id: HostId; val: Epoch) returns (new_epoch: Epoch^N);
+let
+  new_epoch[i] =
+    if host_id = i
+    then val
+    else epoch[i];
+tel
+
+node grant(state: ClientState; message: Message) returns (new_state: ClientState);
+let
+  new_state = ClientState {
+    has_lock = set_has_lock(state.has_lock, message.src, true);
+    epoch = set_epoch(state.epoch, message.src, message.epoch);
+    nw_send = OptNone@<Message>();
+  };
+tel
+
+function relinquish(state: ClientState; src: HostId; dest: HostId) returns (new_state: ClientState);
+let
+  new_state = ClientState{
+    has_lock = set_has_lock(state.has_lock, dest, false);
+    epoch = state.epoch;
+    nw_send = OptSome@<Message>(Message {
+        kind = Release;
+        src = src;
+        dest = dest;
+        epoch = state.epoch[dest];
+      });
+  };
+tel
+
+-- }}}
+
+node Client(
+  my_turn: bool;
+  host_id: HostId;
+  nw_recv: Option<Message>;
+)
+returns (
+  state: ClientState;
+);
+var prev_state: ClientState;
+var acquire, release: bool;
+var send_to: Option<HostId>;
+let
+  prev_state = InitState() -> pre state;
+
+  send_to = any { hid : Option<HostId> | hid.some => prev_state.has_lock[hid.value] };
+
+  acquire =
+    my_turn and
+    nw_recv.some and
+    nw_recv.value.dest = host_id and
+    valid_grant(prev_state, nw_recv.value)
+    ;
+
+  release =
+    my_turn and
+    not acquire and
+    send_to.some
+    ;
+
+  state =
+    if acquire
+    then grant(prev_state, nw_recv.value)
+    else if release
+    then relinquish(prev_state, host_id, send_to.value)
+    else prev_state;
+
+tel
+
+-- vim:foldmethod=marker:foldlevel=0
