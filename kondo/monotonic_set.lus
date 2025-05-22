@@ -1,0 +1,41 @@
+include "common.lus"
+
+type Val = subrange [0,10] of int;
+
+type MonotonicSet;
+
+node imported set_contains(set: MonotonicSet; val: Val) returns (b: bool);
+(*@contract
+
+  guarantee "Sets start empty"
+    not b -> true;
+
+  guarantee "Monotonicity"
+    false -> pre b => b;
+*)
+
+node imported set_add(set: MonotonicSet; val: Val) returns (new_set: MonotonicSet);
+(*@contract
+
+  guarantee
+    set_contains(new_set, val);
+*)
+
+node imported set_rand(set: MonotonicSet) returns (val: Option<Val>);
+(*@contract
+
+  guarantee
+    val.some => set_contains(set, val.value);
+*)
+
+node main(empty_set: MonotonicSet) returns (set: MonotonicSet);
+(*@contract
+  guarantee
+    forall (val: Val)
+      set_contains(set, val) = (val = 2);
+*)
+var prev_set: MonotonicSet;
+let
+  prev_set = empty_set -> pre set;
+  set = set_add(prev_set, 2);
+tel
