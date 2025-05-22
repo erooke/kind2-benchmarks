@@ -135,7 +135,7 @@ function imported equal_states(s1: HostState; s2: HostState) returns (b: bool);
 node Host(
   my_turn: bool;
   host_id: HostId;
-  prev_state: HostState;
+  init_state: HostState;
   nw_recv: Option<Message>;
 )
 returns (
@@ -143,14 +143,13 @@ returns (
 );
 (*@contract
 
+  var prev_state: HostState = init_state -> pre state;
+
   assume "Init state is valid"
     false =>
       initial_state(init_state)
         -> true;
 
-  assume "Prev state is well behaved"
-    initial_state(prev_state)
-      -> equal_states(arbitrary_host_state() -> pre state, prev_state);
   guarantee "Frame one"
     not my_turn
       => equivalent_states(prev_state, state);
@@ -165,7 +164,10 @@ returns (
 *)
 var sending, acquire, want_to_send: bool;
 var dest: HostId;
+var prev_state: HostState;
 let
+  prev_state = init_state -> pre state;
+
   want_to_send = any bool;
   dest = any { hid: HostId | hid <> host_id };
 
