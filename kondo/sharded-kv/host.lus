@@ -8,6 +8,7 @@ type HostState = struct {
   keys: KeyMap;
 };
 
+function imported arbitrary_host_state() returns (s : HostState);
 
 transparent function get(state: HostState; k: Key) returns (e: Entry);
 let
@@ -142,10 +143,14 @@ returns (
 );
 (*@contract
 
+  assume "Init state is valid"
+    false =>
+      initial_state(init_state)
+        -> true;
+
   assume "Prev state is well behaved"
     initial_state(prev_state)
-      -> equal_states(pre state, prev_state);
-
+      -> equal_states(arbitrary_host_state() -> pre state, prev_state);
   guarantee "Frame one"
     not my_turn
       => equivalent_states(prev_state, state);

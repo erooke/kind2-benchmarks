@@ -7,7 +7,7 @@ type State = HostState^N;
 node System(
   turn: HostId;
   init_state: State;
-  )
+)
 returns ( host_states: State );
 (*@contract
 
