@@ -18,10 +18,11 @@ function imported LeaderState_eq(s1, s2: LeaderState) returns (res: bool);
 (*@contract
 
   guarantee
-    OptEq@<Nat>(s1.highest_heard_ballot, s2.highest_heard_ballot) and
-    AcceptorIdSet_Eq(s1.promises, s2.promises) and
-    s1.promises_size = s2.promises_size
-    ;
+    res =
+      OptEq@<Nat>(s1.highest_heard_ballot, s2.highest_heard_ballot) and
+      AcceptorIdSet_Eq(s1.promises, s2.promises) and
+      s1.promises_size = s2.promises_size
+      ;
 *)
 
 
