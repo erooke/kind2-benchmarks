@@ -3,7 +3,7 @@ include "types.lus"
 
 type LeaderConstant = struct {
   id: LeaderId;
-  value: Nat;
+  value: Value;
   f: Nat;
 };
 
