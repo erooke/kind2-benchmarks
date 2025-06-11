@@ -1,27 +1,26 @@
 include "../common.lus"
 include "types.lus"
 
-type LeaderState = struct {
+type LeaderConstant = struct {
   id: LeaderId;
+  value: Nat;
+  f: Nat;
+};
+
+type LeaderState = struct {
   highest_heard_ballot: Option<Nat>;
   promises: AcceptorIdSet;
   promises_size: Nat;
-  value: Nat;
-  f: Nat;
 };
 
 --{{{ Predicates
 function imported LeaderState_eq(s1, s2: LeaderState) returns (res: bool);
 (*@contract
 
-
   guarantee
-    s1.id = s2.id and
     OptEq@<Nat>(s1.highest_heard_ballot, s2.highest_heard_ballot) and
     AcceptorIdSet_Eq(s1.promises, s2.promises) and
-    s1.promises_size = s2.promises_size and
-    s1.value = s2.value and
-    s1.f = s2.f
+    s1.promises_size = s2.promises_size
     ;
 *)
 
@@ -53,14 +52,14 @@ let
     state.highest_heard_ballot.value < b;
 tel
 
-function can_propose(state: LeaderState) returns (res: bool)
+function can_propose(state: LeaderState; constant: LeaderConstant) returns (res: bool)
 let
-  res = state.promises_size >= state.f+1;
+  res = state.promises_size >= constant.f+1;
 tel
 
-function can_propose_v(state: LeaderState; val: Value) returns (res: bool)
+function can_propose_v(state: LeaderState; constant: LeaderConstant; val: Value) returns (res: bool)
 let
-  res = can_propose(state) and state.value = val;
+  res = can_propose(state, constant) and constant.value = val;
 tel
 
 function imported init(state: LeaderState) returns (res: bool);
@@ -74,7 +73,7 @@ function imported init(state: LeaderState) returns (res: bool);
 *)
 --}}}
 
-node imported propose_step(prev_state: LeaderState; nw_recv: Option<Message>)
+node propose_step(prev_state: LeaderState; constant: LeaderConstant; nw_recv: Option<Message>)
 returns (state: LeaderState; nw_send: Option<Message>);
 (*@contract
   guarantee
@@ -84,13 +83,18 @@ returns (state: LeaderState; nw_send: Option<Message>);
     nw_send.some => nw_send.value.kind = Propose;
 
   guarantee
-    nw_send.some => can_propose_v(prev_state, nw_send.value.propose.val);
+    nw_send.some => can_propose_v(prev_state, constant, nw_send.value.propose.val);
 
   guarantee
-    nw_send.some => nw_send.value.propose.bal = state.id;
+    nw_send.some => nw_send.value.propose.bal = constant.id;
 
   guarantee
-    nw_send.some => nw_send.value.propose.val = state.value;
+    nw_send.some => nw_send.value.propose.val = constant.value;
 *)
-
-node imported receive_step
+let
+  state = prev_state;
+  nw_send =
+    if can_propose_v(prev_state, constant, constant.value)
+    then OptSome@<Message>(make_propose(constant.id, constant.value))
+    else OptNone@<Message>();
+tel
