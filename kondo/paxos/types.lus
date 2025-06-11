@@ -342,6 +342,23 @@ let
 tel
 -- }}}}
 
+-- {{{ Constructors
+
+node make_propose(bal: LeaderId; val: Value)
+returns (msg: Message)
+let
+  msg = Message {
+    kind = Propose;
+    prepare = any PrepareMsg;
+    promise = any PromiseMsg;
+    propose = ProposeMsg { bal = bal; val = val; };
+    accept = any AcceptMsg;
+    learn = any LearnMsg;
+};
+tel
+
+-- }}}
+
 -- {{{ AcceptorIdSet
 type AcceptorIdSet = bool^Num_Acceptors;
 
