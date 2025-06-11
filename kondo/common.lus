@@ -18,7 +18,9 @@ tel
 
 transparent function OptEq<T>(o1, o2: Option<T>) returns (res : bool)
 let
-  res = not (o1.some or o2.some) or (o1.value = o2.value);
+  res =
+    o1.some = o2.some and
+    o1.some => o1.value = o2.value;
 tel
 
 function min(a: int; b: int) returns ( c: int );
