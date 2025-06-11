@@ -18,12 +18,26 @@ let
     ;
 tel
 
-node System(tk_holder: Token_Holder) returns (serverStates: ServerState^N;);
+node System(tk_holder: Token_Holder) returns (serverStates: ServerState^N; clientStates: ClientState^N);
+var nw_recv, nw_send: Option<Message>;
+var seen_messages: MessageSet;
 let
+
+  nw_recv, seen_messages = Network(nw_send);
+
   serverStates[i] =
-    Server(
-      false,
-      0,
-      OptNone@<Message>()
-    );
+    Server(is_turn(Server, i, tk_holder), i, nw_recv);
+
+  clientStates[i] =
+    Client(is_turn(Client, i, tk_holder), i, nw_recv);
+
+  nw_send =
+    if tk_holder.class = Server
+    then serverStates[tk_holder.id].nw_send
+    else if tk_holder.class = Client
+    then clientStates[tk_holder.id].nw_send
+    else OptNone@<Message>()
+    ;
+
+
 tel
