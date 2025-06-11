@@ -387,7 +387,9 @@ tel
 function imported AcceptorIdSet_Eq(s1, s2: AcceptorIdSet) returns (res: bool);
 (*@contract
   guarantee
-    res = not (exists (id: AcceptorId) s1[id] <> s2[id]);
+    res =
+      forall (id : AcceptorId)
+        s1[id] = s2[id];
 *)
 
 function AcceptorIdSet_Add(set: AcceptorIdSet; id: AcceptorId)
