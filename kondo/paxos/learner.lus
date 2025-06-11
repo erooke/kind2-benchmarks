@@ -1,0 +1,27 @@
+include "../common.lus"
+include "types.lus"
+
+type LearnerState = {
+  received_accepts: ReceivedAccepts;
+  learned: Option<Value>;
+};
+
+node LearnerState_Init() returns (state: LearnerState);
+let
+  state = LearnerState {
+    received_accepts = ReceivedAccepts_Empty;
+    learned = OptNone@<Value>();
+  };
+tel
+
+node Learner(
+  my_turn: bool;
+  id: LearnerId;
+  nw_recv: Option<Message>;
+)
+returns (
+  state: LearnerState;
+);
+let
+  state = LearnerState_Init();
+tel

@@ -1,0 +1,96 @@
+include "../common.lus"
+include "types.lus"
+
+type LeaderState = struct {
+  id: LeaderId;
+  highest_heard_ballot: Option<Nat>;
+  promises: AcceptorIdSet;
+  promises_size: Nat;
+  value: Nat;
+  f: Nat;
+};
+
+--{{{ Predicates
+function imported LeaderState_eq(s1, s2: LeaderState) returns (res: bool);
+(*@contract
+
+
+  guarantee
+    s1.id = s2.id and
+    OptEq@<Nat>(s1.highest_heard_ballot, s2.highest_heard_ballot) and
+    AcceptorIdSet_Eq(s1.promises, s2.promises) and
+    s1.promises_size = s2.promises_size and
+    s1.value = s2.value and
+    s1.f = s2.f
+    ;
+*)
+
+
+node imported satisfies_monotonic(state: LeaderState) returns (res: bool);
+(*@contract
+
+  guarantee
+    forall (i : AcceptorId) (false -> pre (state.promises[i])) => state.promises[i];
+
+  guarantee
+    (false -> (pre state.highest_heard_ballot).some) => state.highest_heard_ballot.some;
+
+  guarantee
+    (false -> (pre state.highest_heard_ballot).some) => state.highest_heard_ballot.some;
+*)
+
+function heard_at_least(state: LeaderState; b: Nat) returns (res: bool)
+let
+  res =
+    state.highest_heard_ballot.some and
+    state.highest_heard_ballot.value >= b;
+tel
+
+function heard_at_most(state: LeaderState; b: Nat) returns (res: bool)
+let
+  res =
+    not state.highest_heard_ballot.some or
+    state.highest_heard_ballot.value < b;
+tel
+
+function can_propose(state: LeaderState) returns (res: bool)
+let
+  res = state.promises_size >= state.f+1;
+tel
+
+function can_propose_v(state: LeaderState; val: Value) returns (res: bool)
+let
+  res = can_propose(state) and state.value = val;
+tel
+
+function imported init(state: LeaderState) returns (res: bool);
+(*@contract
+
+  guarantee res =
+    not state.highest_heard_ballot.some and
+    state.promises_size = 0 and
+    not (exists (id: AcceptorId) AcceptorIdSet_Contains(state.promises, id))
+    ;
+*)
+--}}}
+
+node imported propose_step(prev_state: LeaderState; nw_recv: Option<Message>)
+returns (state: LeaderState; nw_send: Option<Message>);
+(*@contract
+  guarantee
+    LeaderState_eq(prev_state, state);
+
+  guarantee
+    nw_send.some => nw_send.value.kind = Propose;
+
+  guarantee
+    nw_send.some => can_propose_v(prev_state, nw_send.value.propose.val);
+
+  guarantee
+    nw_send.some => nw_send.value.propose.bal = state.id;
+
+  guarantee
+    nw_send.some => nw_send.value.propose.val = state.value;
+*)
+
+node imported receive_step

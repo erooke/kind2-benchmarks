@@ -1,0 +1,22 @@
+type Nat = subrange [0,*] of int;
+type Pos = subrange [1,*] of int;
+
+const Num_Acceptors: Pos;
+
+type AcceptorIdSet = bool^Num_Acceptors;
+
+const AcceptorIdSet_Empty: AcceptorIdSet = false^Num_Acceptors;
+
+function AcceptorIdSet_Size(set: AcceptorIdSet)
+returns (res: Nat)
+(*@contract
+*)
+var accum: Nat^Num_Acceptors;
+let
+  accum[i] =
+    if i = 0
+    then (if set[0] then 1 else 0)
+    else (accum[i-1] + if set[i] then 1 else 0)
+    ;
+  res = accum[Num_Acceptors-1];
+tel

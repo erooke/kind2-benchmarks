@@ -1,0 +1,413 @@
+include "../common.lus"
+
+const Num_Leaders: Pos;
+
+const Num_Acceptors: Pos;
+
+const Num_Learners: Pos;
+
+const Num_Values: Pos;
+
+type LeaderId = subtype { i : Nat | i < Num_Leaders };
+
+type AcceptorId = subtype { i : Nat | i < Num_Acceptors };
+
+type LearnerId = subtype { i : Nat | i < Num_Learners };
+
+type Value = subtype { i : Nat | i < Num_Values };
+
+type ValBal = { v: Value; b: LeaderId };
+
+-- {{{ Messages
+
+type MessageKind = enum { Prepare, Promise, Propose, Accept, Learn };
+
+-- {{{ Prepare
+
+type PrepareMsg = { bal: LeaderId };
+
+type PrepareMsgSet = bool^Num_Leaders;
+
+const PrepareMsgSet_Empty: PrepareMsgSet = false^Num_Leaders;
+
+function PrepareMsgSet_Contains(set: PrepareMsgSet; msg: PrepareMsg)
+returns (result: bool)
+let
+  result = set[msg.bal];
+tel
+
+function PrepareMsgSet_Add(set: PrepareMsgSet; msg: PrepareMsg)
+returns (new_set: PrepareMsgSet)
+(*@contract
+  guarantee
+    PrepareMsgSet_Contains(new_set, msg);
+
+  guarantee
+    forall (m: PrepareMsg)
+      PrepareMsgSet_Contains(set, m) => PrepareMsgSet_Contains(new_set, m);
+
+  guarantee
+    forall (m: PrepareMsg)
+      PrepareMsgSet_Contains(new_set, m) => PrepareMsgSet_Contains(set, m) or (m = msg);
+*)
+let
+  new_set[i] = (i = msg.bal) or set[i];
+tel
+
+-- }}}
+
+-- {{{ Promise
+
+type PromiseMsg = { bal: LeaderId; acc: AcceptorId; vbOpt: Option<ValBal>};
+
+function PromiseMsg_eq (msg1: PromiseMsg; msg2: PromiseMsg)
+returns (result: bool)
+let
+  result =
+    if msg1.vbOpt.some and msg2.vbOpt.some then msg1 = msg2
+    else msg1.bal = msg2.bal and msg1.acc = msg2.acc;
+tel
+
+type PromiseMsgSet = {
+  none: bool^Num_Leaders^Num_Acceptors;
+  some: bool^Num_Leaders^Num_Acceptors^Num_Values^Num_Leaders;
+};
+
+const PromiseMsgSet_Empty: PromiseMsgSet = PromiseMsgSet {
+  none = false^Num_Leaders^Num_Acceptors;
+  some = false^Num_Leaders^Num_Acceptors^Num_Values^Num_Leaders;
+};
+
+function PromiseMsgSet_Contains(set: PromiseMsgSet; msg: PromiseMsg)
+returns (result: bool)
+let
+  result =
+    if msg.vbOpt.some
+    then set.some[msg.vbOpt.value.b][msg.vbOpt.value.v][msg.acc][msg.bal]
+    else set.none[msg.acc][msg.bal];
+tel
+
+function PromiseMsgSet_Add(set: PromiseMsgSet; msg: PromiseMsg)
+returns (new_set: PromiseMsgSet);
+(*@contract
+  guarantee
+    PromiseMsgSet_Contains(new_set, msg);
+
+  guarantee
+    forall (m: PromiseMsg)
+      PromiseMsgSet_Contains(set, m) => PromiseMsgSet_Contains(new_set, m);
+
+  guarantee
+    forall (m: PromiseMsg)
+      PromiseMsgSet_Contains(new_set, m) => PromiseMsgSet_Contains(set, m) or PromiseMsg_eq(m, msg);
+
+*)
+var new_none: bool^Num_Leaders^Num_Acceptors;
+var new_some: bool^Num_Leaders^Num_Acceptors^Num_Values^Num_Leaders;
+let
+  new_none[j][i] =
+    ( not msg.vbOpt.some
+      and i = msg.bal
+      and j = msg.acc
+    ) or set.none[j][i];
+
+  new_some[l][k][j][i] =
+    (     msg.vbOpt.some
+      and i = msg.bal
+      and j = msg.acc
+      and k = msg.vbOpt.value.v
+      and l = msg.vbOpt.value.b
+    ) or set.some[l][k][j][i];
+
+  new_set = PromiseMsgSet {
+    none = new_none;
+    some = new_some;
+  };
+tel
+-- }}}
+
+-- {{{ Propose
+type ProposeMsg = { bal: LeaderId; val: Value };
+
+type ProposeMsgSet = bool^Num_Leaders^Num_Values;
+
+const ProposeMsgSet_Empty: ProposeMsgSet = false^Num_Leaders^Num_Values;
+
+function ProposeMsgSet_Contains(set: ProposeMsgSet; msg: ProposeMsg)
+returns (result: bool)
+let
+  result = set[msg.val][msg.bal];
+tel
+
+function ProposeMsgSet_Add(set: ProposeMsgSet; msg: ProposeMsg)
+returns (new_set: ProposeMsgSet)
+(*@contract
+  guarantee
+    ProposeMsgSet_Contains(new_set, msg);
+
+  guarantee
+    forall (m: ProposeMsg)
+      ProposeMsgSet_Contains(set, m) => ProposeMsgSet_Contains(new_set, m);
+
+  guarantee
+    forall (m: ProposeMsg)
+      ProposeMsgSet_Contains(new_set, m) => ProposeMsgSet_Contains(set, m) or (m = msg);
+
+*)
+let
+  new_set[j][i] =
+    (     msg.bal = i
+      and msg.val = j
+    ) or set[j][i];
+tel
+
+-- }}}
+
+-- {{{ Accept
+
+type AcceptMsg = { vb: ValBal; acc: AcceptorId };
+
+type AcceptMsgSet = bool^Num_Values^Num_Leaders^Num_Acceptors;
+
+const AcceptMsgSet_Empty: AcceptMsgSet = false^Num_Values^Num_Leaders^Num_Acceptors;
+
+function AcceptMsgSet_Contains(set: AcceptMsgSet; msg: AcceptMsg)
+returns (result: bool)
+let
+  result = set[msg.acc][msg.vb.b][msg.vb.v];
+tel
+
+
+function AcceptMsgSet_Add(set: AcceptMsgSet; msg: AcceptMsg)
+returns (new_set: AcceptMsgSet)
+(*@contract
+  guarantee
+    AcceptMsgSet_Contains(new_set, msg);
+
+  guarantee
+    forall (m: AcceptMsg)
+      AcceptMsgSet_Contains(set, m) => AcceptMsgSet_Contains(new_set, m);
+
+  guarantee
+    forall (m: AcceptMsg)
+      AcceptMsgSet_Contains(new_set, m) => AcceptMsgSet_Contains(set, m) or (m = msg);
+*)
+let
+  new_set[k][j][i] =
+    (    i = msg.vb.v
+     and j = msg.vb.b
+     and k = msg.acc
+    ) or set[k][j][i];
+tel
+
+-- }}} 
+
+-- {{{ Learn
+type LearnMsg = { learner: LearnerId; bal: LeaderId; val: Value };
+
+type LearnMsgSet = bool^Num_Learners^Num_Leaders^Num_Values;
+
+const LearnMsgSet_Empty: LearnMsgSet = false^Num_Learners^Num_Leaders^Num_Values;
+
+function LearnMsgSet_Contains(set: LearnMsgSet; msg: LearnMsg)
+returns (result: bool)
+let
+  result = set[msg.val][msg.bal][msg.learner];
+tel
+
+function LearnMsgSet_Add(set: LearnMsgSet; msg: LearnMsg)
+returns (new_set: LearnMsgSet)
+(*@contract
+  guarantee
+    LearnMsgSet_Contains(new_set, msg);
+
+  guarantee
+    forall (m: LearnMsg)
+      LearnMsgSet_Contains(set, m) => LearnMsgSet_Contains(new_set, m);
+
+  guarantee
+    forall (m: LearnMsg)
+      LearnMsgSet_Contains(new_set, m) => LearnMsgSet_Contains(set, m) or (m = msg);
+*)
+let
+  new_set[k][j][i] =
+    (   i = msg.learner
+    and j = msg.bal
+    and k = msg.val
+    ) or set[k][j][i];
+tel
+
+-- }}}
+
+type Message = {
+    kind: MessageKind;
+    prepare: PrepareMsg;
+    promise: PromiseMsg;
+    propose: ProposeMsg;
+    accept: AcceptMsg;
+    learn: LearnMsg;
+};
+
+-- {{{ Message methods
+
+-- {{{ Constructors
+node prepare(bal: LeaderId) returns(msg: Message)
+let
+  msg = Message {
+      kind = Prepare;
+      prepare = PrepareMsg { bal = bal };
+      promise = any PromiseMsg;
+      propose = any ProposeMsg;
+      accept = any AcceptMsg;
+      learn = any LearnMsg;
+  };
+tel
+
+node propose(bal: LeaderId; val: Value) returns(msg: Message)
+let
+  msg = Message {
+      kind = Propose;
+      prepare = any PrepareMsg;
+      promise = any PromiseMsg;
+      propose = ProposeMsg { bal = bal; val=val };
+      accept = any AcceptMsg;
+      learn = any LearnMsg;
+  };
+tel
+-- }}}
+
+function Message_eq(msg1: Message; msg2: Message)
+returns (result: bool)
+let
+  result =
+    (msg1.kind = Prepare and msg2.kind = Prepare and msg1.prepare = msg2.prepare) or
+    (msg1.kind = Promise and msg2.kind = Promise and PromiseMsg_eq(msg1.promise, msg2.promise)) or
+    (msg1.kind = Propose and msg2.kind = Propose and msg1.propose = msg2.propose) or
+    (msg1.kind = Accept and msg2.kind = Accept and msg1.accept = msg2.accept) or
+    (msg1.kind = Learn and msg2.kind = Learn and msg1.learn = msg2.learn);
+tel
+
+type MessageSet = {
+  prepare: PrepareMsgSet;
+  promise: PromiseMsgSet;
+  propose: ProposeMsgSet;
+  accept: AcceptMsgSet;
+  learn: LearnMsgSet;
+};
+
+const MessageSet_Empty: MessageSet = MessageSet {
+  prepare = PrepareMsgSet_Empty;
+  promise = PromiseMsgSet_Empty;
+  propose = ProposeMsgSet_Empty;
+  accept = AcceptMsgSet_Empty;
+  learn = LearnMsgSet_Empty;
+};
+
+
+function MessageSet_Contains(set: MessageSet; msg: Message)
+returns (result: bool)
+let
+  result =
+    if msg.kind = Prepare then PrepareMsgSet_Contains(set.prepare, msg.prepare) else
+    if msg.kind = Promise then PromiseMsgSet_Contains(set.promise, msg.promise) else
+    if msg.kind = Propose then ProposeMsgSet_Contains(set.propose, msg.propose ) else
+    if msg.kind = Accept then AcceptMsgSet_Contains(set.accept, msg.accept) else
+    if msg.kind = Learn then LearnMsgSet_Contains(set.learn, msg.learn) else
+      false;
+tel
+
+
+function MessageSet_Add(set: MessageSet; msg: Message)
+returns (new_set: MessageSet)
+(*@contract
+  guarantee
+    MessageSet_Contains(new_set, msg);
+
+  guarantee
+    forall (m: Message)
+      MessageSet_Contains(set, m) => MessageSet_Contains(new_set, m);
+
+  guarantee
+    forall (m: Message)
+      MessageSet_Contains(new_set, m) => MessageSet_Contains(set, m) or Message_eq(m, msg);
+*)
+let
+  new_set = MessageSet {
+    prepare = if msg.kind = Prepare then PrepareMsgSet_Add(set.prepare, msg.prepare) else set.prepare;
+    promise = if msg.kind = Promise then PromiseMsgSet_Add(set.promise, msg.promise) else set.promise;
+    propose = if msg.kind = Propose then ProposeMsgSet_Add(set.propose, msg.propose) else set.propose;
+    accept = if msg.kind = Accept then AcceptMsgSet_Add(set.accept, msg.accept) else set.accept;
+    learn = if msg.kind = Learn then LearnMsgSet_Add(set.learn, msg.learn) else set.learn;
+  };
+tel
+-- }}}}
+
+-- {{{ AcceptorIdSet
+type AcceptorIdSet = bool^Num_Acceptors;
+
+const AcceptorIdSet_Empty: AcceptorIdSet = false^Num_Acceptors;
+
+(* issue: Causes non-linear terms
+function AcceptorIdSet_Size(set: AcceptorIdSet)
+returns (res: Nat)
+var accum: Nat^Num_Acceptors;
+let
+  accum[i] =
+    if i = 0
+    then (if set[0] then 1 else 0)
+    else (accum[i-1] + if set[i] then 1 else 0)
+    ;
+  res = accum[Num_Acceptors-1];
+tel
+*)
+
+function AcceptorIdSet_Contains(set: AcceptorIdSet; id: AcceptorId)
+returns (result: bool)
+let
+  result = set[id];
+tel
+
+function imported AcceptorIdSet_Eq(s1, s2: AcceptorIdSet) returns (res: bool);
+(*@contract
+  guarantee
+    res = not (exists (id: AcceptorId) s1[id] <> s2[id]);
+*)
+
+function AcceptorIdSet_Add(set: AcceptorIdSet; id: AcceptorId)
+returns (new_set: AcceptorIdSet)
+(*@contract
+  guarantee
+    AcceptorIdSet_Contains(new_set, id);
+
+  guarantee
+    forall (i: AcceptorId)
+      AcceptorIdSet_Contains(set, i) => AcceptorIdSet_Contains(new_set, i);
+
+  guarantee
+    forall (i: AcceptorId)
+      AcceptorIdSet_Contains(new_set, i) => AcceptorIdSet_Contains(set, i) or (i = id);
+*)
+let
+  new_set[i] = (i = id) or set[i];
+tel
+
+type ReceivedAccepts = bool^Num_Acceptors^Num_Values^Num_Leaders;
+
+const ReceivedAccepts_Empty: ReceivedAccepts = false^Num_Acceptors^Num_Values^Num_Leaders;
+
+function ReceivedAccepts_Add(ra: ReceivedAccepts; vb: ValBal; id: AcceptorId)
+returns (new_ra: ReceivedAccepts)
+let
+  new_ra[b][v][a] = (vb.v = v and vb.b = b and id = a) or ra[b][v][a];
+tel
+
+function ReceivedAccepts_Get(ra: ReceivedAccepts; vb: ValBal)
+returns (acceptors: AcceptorIdSet)
+let
+  acceptors[a] = ra[vb.b][vb.v][a];
+tel
+-- }}}
+
+-- }}}
+
+-- vim:foldmethod=marker:foldlevel=0
