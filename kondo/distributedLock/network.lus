@@ -1,0 +1,20 @@
+include "../commons.lus"
+include "types.lus"
+
+node Network(send: Option<Message>) returns
+( recv: Option<Message>;
+  seen: MessageSet );
+var prev_seen: MessageSet;
+let
+  prev_seen = MessageSet_Empty -> pre seen;
+
+  recv = any {
+    m: Option<Message> |
+    m.some => MessageSet_Contains(prev_seen, m.value)
+  };
+
+  seen =
+    if send.some
+    then MessageSet_Add(seen, send.value)
+    else prev_seen;
+tel

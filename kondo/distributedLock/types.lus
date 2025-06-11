@@ -1,0 +1,146 @@
+include "../common.lus"
+
+-- We need at least two hosts, 0 is always the server, 1 - N are the clients.
+const NumHosts: subrange[2, *] of int; -- Number of hosts
+type HostId = subtype { i : Nat | i < NumHosts };
+
+const MaxEpoch: subrange[2, *] of int; -- Number of epochs allowed
+type Epoch = subtype { i : Nat | i < MaxEpoch };
+
+type MessageKind = enum { Grant, Release };
+
+-- {{{ Grant Message
+
+type GrantMsg = {
+  src: HostId;
+  dest: HostId;
+  epoch: Epoch;
+};
+
+type GrantMsgSet = bool^NumHosts^NumHosts^MaxEpoch;
+
+const GrantMsgSet_Empty: GrantMsgSet = false^NumHosts^NumHosts^MaxEpoch;
+
+function GrantMsgSet_Contains(set: GrantMsgSet; msg: GrantMsg)
+returns (result: bool)
+let
+  result = set[msg.epoch][msg.dest][msg.src];
+tel
+
+function GrantMsgSet_Add(set: GrantMsgSet; msg: GrantMsg)
+returns (new_set: GrantMsgSet)
+(*@contract
+  guarantee
+    forall (m : GrantMsg)
+      GrantMsgSet_Contains(new_set, m) =
+        (GrantMsgSet_Contains(set, m) or (m = msg));
+*)
+let
+  new_set[e][d][s] = ( (e = msg.epoch) and
+                       (d = msg.dest) and
+                       (s = msg.src)
+                     ) or set[e][d][s];
+tel
+
+-- }}}
+
+-- {{{ Release Message
+type ReleaseMsg = {
+  src: HostId;
+  epoch: Epoch;
+};
+
+type ReleaseMsgSet = bool^NumHosts^MaxEpoch;
+
+const ReleaseMsgSet_Empty: ReleaseMsgSet = false^NumHosts^MaxEpoch;
+
+function ReleaseMsgSet_Contains(set: ReleaseMsgSet; msg: ReleaseMsg)
+returns (result: bool)
+let
+  result = set[msg.epoch][msg.src];
+tel
+
+function imported ReleaseMsgSet_Eq(set1, set2: ReleaseMsgSet)
+returns (result: bool);
+(*@contract
+  guarantee
+    result =
+      forall (msg: ReleaseMsg)
+        ReleaseMsgSet_Contains(set1, msg) = ReleaseMsgSet_Contains(set2, msg);
+*)
+
+function ReleaseMsgSet_Add(set: ReleaseMsgSet; msg: ReleaseMsg)
+returns (new_set: ReleaseMsgSet)
+(*@contract
+  guarantee
+    forall (m : ReleaseMsg)
+      ReleaseMsgSet_Contains(new_set, m)
+        = (ReleaseMsgSet_Contains(set, m) or (m = msg));
+*)
+let
+  new_set[e][s] = set[e][s] or ( (msg.epoch = e) and (msg.src = s) );
+tel
+-- }}}
+
+type Message = {
+  kind: MessageKind;
+  grant: GrantMsg;
+  release: ReleaseMsg;
+};
+
+function Message_eq(msg1, msg2: Message)
+returns (result: bool)
+let
+  result =
+    (msg1.kind = Grant and msg2.kind = Grant and msg1.grant = msg2.grant) or
+    (msg1.kind = Release and msg2.kind = Release and msg1.release = msg2.release);
+tel
+
+type MessageSet = {
+  grant: GrantMsgSet;
+  release: ReleaseMsgSet;
+};
+
+const MessageSet_Empty: MessageSet = MessageSet {
+  grant = GrantMsgSet_Empty;
+  release = ReleaseMsgSet_Empty;
+};
+
+function MessageSet_Contains(set: MessageSet; msg: Message)
+returns (result: bool)
+(*@contract
+  guarantee
+    (msg.kind = Grant)
+      => result = GrantMsgSet_Contains(set.grant, msg.grant);
+
+  guarantee
+    (msg.kind = Release)
+      => result = ReleaseMsgSet_Contains(set.release, msg.release);
+*)
+let
+  result =
+    if msg.kind = Grant then GrantMsgSet_Contains(set.grant, msg.grant) else
+    if msg.kind = Release then ReleaseMsgSet_Contains(set.release, msg.release) else
+    false;
+tel
+
+-- TODO: We cannot prove anything about this thing... also in compositional
+-- mode everything breaks for reasons beyond my comprehension
+function MessageSet_Add(set: MessageSet; msg: Message)
+returns (new_set: MessageSet)
+(*@contract
+  guarantee
+    MessageSet_Contains(new_set, msg);
+*)
+let
+  new_set = MessageSet {
+    grant =
+      if msg.kind = Grant
+      then GrantMsgSet_Add(set.grant, msg.grant)
+      else set.grant;
+    release =
+      if msg.kind = Release
+      then ReleaseMsgSet_Add(set.release, msg.release)
+      else set.release;
+  };
+tel
